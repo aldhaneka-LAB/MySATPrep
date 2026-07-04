@@ -292,7 +292,7 @@ export function MigrationChecker() {
     async function runMigrationCheck() {
       try {
         // Requirement 11.1 – fetch user data from backend
-        const response = await fetch("/api/user/data", {
+        const response = await fetch("/api/user/complete-data", {
           method: "GET",
           credentials: "include",
         });
@@ -310,6 +310,8 @@ export function MigrationChecker() {
           };
         };
         const userData = json.data;
+
+        console.log("userData", userData);
 
         if (!userData) return;
 
@@ -411,11 +413,11 @@ export function MigrationChecker() {
         onClose={() => setShowPrompt(false)}
         onMigrate={handleMigrate}
       />
-      <SyncPrompt
+      {/* <SyncPrompt
         isOpen={showSyncPrompt}
         onClose={() => setShowSyncPrompt(false)}
         onSync={handleSync}
-      />
+      /> */}
     </>
   );
 }

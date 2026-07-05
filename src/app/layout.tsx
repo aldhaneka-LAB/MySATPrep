@@ -211,7 +211,17 @@ export default function RootLayout({
         </Banner2>
 
         <Banner />
-        <AssessmentProvider>{children}</AssessmentProvider>
+        <AssessmentProvider>
+          <MathJaxContext version={3} config={config}>
+            {/* <Banner
+              message="We just released a new feature!"
+              height="2rem"
+              variant="rainbow"
+            /> */}
+
+            {children}
+          </MathJaxContext>
+        </AssessmentProvider>
 
         <Dialog02 />
 

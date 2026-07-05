@@ -207,7 +207,7 @@ export default function RootLayout({
           ]}
         >
           UPDATE : Authentication system occasionally returns an error,
-          returning back to
+          returning back to default deployment.
         </Banner2>
 
         <Banner />

@@ -1,6 +1,6 @@
 import { neon } from "@neondatabase/serverless";
 
-const databaseUrl = process.env.DATABASE_URL || process.env.NEON_DATABASE_URL;
+const databaseUrl = process.env.NEON_DATABASE_URL;
 
 const sql = databaseUrl ? neon(databaseUrl) : null;
 

@@ -186,14 +186,16 @@ export default function RootLayout({
       <body
         className={`${geistSans.variable} ${geistMono.variable} antialiased`}
       >
-        {/* <Banner
-          message="Some features may be unavailable due to the ongoing global outage."
+        <Banner
+          id="yup"
+          message="Authentication system is currently under investigation. If error
+          persist, please use practicesat.vercel.app with local storage data"
           height="2rem"
           variant="rainbow"
-        /> */}
+        />
 
         <Banner2
-          id="banner-sync-2"
+          id="banner-sync-neww"
           variant="rainbow"
           className=" bg-white dark:bg-transparent"
           rainbowColors={[
@@ -207,7 +209,8 @@ export default function RootLayout({
           ]}
         >
           UPDATE : Authentication system occasionally returns an error,
-          returning back to default deployment.
+          returning back to default deployment with no authentication. If error
+          persist, please use practicesat.vercel.app
         </Banner2>
 
         <Banner />

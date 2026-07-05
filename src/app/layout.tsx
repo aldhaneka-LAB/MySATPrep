@@ -10,9 +10,16 @@ import FooterSection from "@/components/footer";
 import { MathJaxContext } from "better-react-mathjax";
 
 import { Toaster } from "sonner";
-import { Banner } from "@/components/ui/banner";
+import { Banner, Banner2 } from "@/components/ui/banner";
+
 import { AssessmentProvider } from "@/contexts/assessment-context";
 import Dialog02 from "@/components/ui/popup-tour";
+// import { ReduxProvider } from "@/lib/redux/Provider";
+// import { AuthSessionProvider } from "@/components/auth/AuthSessionProvider";
+// import { SessionInitializer } from "@/components/auth/SessionInitializer";
+// import { MigrationChecker } from "@/components/auth/MigrationChecker";
+// import { ErrorBoundary } from "@/components/ErrorBoundary";
+// import { ThemeApplier } from "@/components/ThemeApplier";
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -184,11 +191,27 @@ export default function RootLayout({
           height="2rem"
           variant="rainbow"
         /> */}
-        <AssessmentProvider>
-          <MathJaxContext version={3} config={config}>
-            {children}
-          </MathJaxContext>
-        </AssessmentProvider>
+
+        <Banner2
+          id="banner-sync-2"
+          variant="rainbow"
+          className=" bg-white dark:bg-transparent"
+          rainbowColors={[
+            "rgba(255,210,50,0.77)",
+            "rgba(255,210,50,0.77)",
+            "transparent",
+            "rgba(255,210,50,0.77)",
+            "transparent",
+            "rgba(255,210,50,0.77)",
+            "transparent",
+          ]}
+        >
+          UPDATE : Authentication system occasionally returns an error,
+          returning back to
+        </Banner2>
+
+        <Banner />
+        <AssessmentProvider>{children}</AssessmentProvider>
 
         <Dialog02 />
 

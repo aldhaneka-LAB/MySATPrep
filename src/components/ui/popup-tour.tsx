@@ -72,13 +72,12 @@ export default function Dialog02() {
   };
 
   const handleDialogClose = () => {
-    localStorage.setItem("new-update-tour", "true");
+    localStorage.setItem("new-update-tour-bugs-news", "true");
     setIsOpen(false);
   };
 
   useEffect(() => {
-    // Check if the tour has been completed
-    const tourCompleted = localStorage.getItem("new-update-tour-bugs-fixed");
+    const tourCompleted = localStorage.getItem("new-update-tour-bugs-news");
     if (!tourCompleted || tourCompleted === "false") {
       setIsOpen(true);
     }

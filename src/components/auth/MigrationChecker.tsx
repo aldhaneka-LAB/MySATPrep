@@ -18,14 +18,19 @@
 import { useEffect, useRef, useState } from "react";
 import { useSelector, useDispatch } from "react-redux";
 import { toast } from "sonner";
-import type { RootState, AppDispatch } from "@/lib/redux/store";
+import type { AppDispatch } from "@/lib/redux/store";
 import { MigrationPrompt } from "./MigrationPrompt";
 import { SyncPrompt } from "./SyncPrompt";
 import {
   migrateLocalStorageData,
   syncLocalStorageData,
 } from "@/lib/redux/slices/userDataSlice";
-import { selectIsUserDataLoading } from "@/lib/redux/selectors";
+import {
+  selectIsUserDataLoading,
+  selectIsAuthenticated,
+  selectSessionChecked,
+  selectUser,
+} from "@/lib/redux/selectors";
 import type { MigrationSummary } from "@/lib/types/api";
 
 // ─── localStorage keys that hold user-relevant data ───────────────────────────
@@ -38,7 +43,64 @@ const LOCAL_STORAGE_DATA_KEYS = [
   "savedCollections",
   "vocabsData",
   "userPreferences",
+  "questionNotes",
+  "practicePerformanceData",
+  "answerHistory",
 ] as const;
+
+// ─── Sync-check cache ─────────────────────────────────────────────────────────
+
+/** localStorage key that records when the last sync check was performed. */
+const SYNC_CHECK_KEY = "migrationCheckerLastRun";
+
+/** How long (ms) before the sync check is considered stale and re-runs. */
+const SYNC_CHECK_TTL_MS = 5 * 24 * 60 * 60 * 1000; // 5 days
+
+/**
+ * Returns true if a sync check was performed recently (within the TTL window)
+ * for the given userId, meaning we can skip the fetch this time.
+ */
+function isSyncCheckFresh(userId: string): boolean {
+  if (typeof window === "undefined") return false;
+  try {
+    const raw = localStorage.getItem(SYNC_CHECK_KEY);
+    if (!raw) return false;
+    const parsed = JSON.parse(raw) as { userId?: string; ts?: number };
+    if (parsed.userId !== userId || typeof parsed.ts !== "number") return false;
+    return Date.now() - parsed.ts < SYNC_CHECK_TTL_MS;
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Saves the current timestamp for the given userId so subsequent logins within
+ * the TTL window skip the heavy complete-data fetch.
+ */
+function stampSyncCheck(userId: string): void {
+  if (typeof window === "undefined") return;
+  try {
+    localStorage.setItem(
+      SYNC_CHECK_KEY,
+      JSON.stringify({ userId, ts: Date.now() }),
+    );
+  } catch {
+    // Quota or SSR — ignore
+  }
+}
+
+/**
+ * Clears the sync-check timestamp so the check runs again on the next login
+ * (e.g. after logout or after a successful migration/sync).
+ */
+function clearSyncCheck(): void {
+  if (typeof window === "undefined") return;
+  try {
+    localStorage.removeItem(SYNC_CHECK_KEY);
+  } catch {
+    // ignore
+  }
+}
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -106,12 +168,24 @@ function isDatabaseEmpty(data: {
   return true;
 }
 
+interface LocalDbDiff {
+  differs: boolean;
+  details: {
+    bookmarks?: { localOnly: string[] };
+    sessions?: { localOnly: string[] };
+    collections?: { localOnly: string[] };
+    profile?: { reason: string };
+    statistics?: { assessment: string; localCount: number; dbCount: number }[];
+    vocabulary?: { reason: string };
+  };
+}
+
 /**
  * Reads the localStorage data payload (same shape as the migration endpoint)
- * and compares it against the fetched DB data. Returns true if localStorage
- * contains data that isn't already reflected in the database.
+ * and compares it against the fetched DB data. Returns a diff object with
+ * `differs` flag and `details` describing exactly what is out of sync.
  *
- * The check is intentional shallow/structural — we're not doing a deep-equal
+ * The check is intentionally shallow/structural — we're not doing a deep-equal
  * of every field, just detecting whether there's something meaningful in
  * localStorage that the DB doesn't have (e.g. more bookmarks, sessions, etc.).
  */
@@ -123,8 +197,10 @@ function localStorageDiffersFromDb(dbData: {
   collections: { collectionId?: string }[];
   vocabulary: unknown;
   preferences: unknown;
-}): boolean {
-  if (typeof window === "undefined") return false;
+}): LocalDbDiff {
+  if (typeof window === "undefined") return { differs: false, details: {} };
+
+  const details: LocalDbDiff["details"] = {};
 
   try {
     // ── Bookmarks ─────────────────────────────────────────────────────────────
@@ -139,10 +215,10 @@ function localStorageDiffersFromDb(dbData: {
         const dbQuestionIds = new Set(
           dbData.bookmarks.map((b) => b.questionId).filter(Boolean),
         );
-        const hasNew = localBookmarks.some(
-          (b) => b.questionId && !dbQuestionIds.has(b.questionId),
-        );
-        if (hasNew) return true;
+        const localOnly = localBookmarks
+          .map((b) => b.questionId)
+          .filter((id): id is string => !!id && !dbQuestionIds.has(id));
+        if (localOnly.length > 0) details.bookmarks = { localOnly };
       }
     }
   } catch {
@@ -158,10 +234,10 @@ function localStorageDiffersFromDb(dbData: {
         const dbSessionIds = new Set(
           dbData.sessions.map((s) => s.sessionId).filter(Boolean),
         );
-        const hasNew = localSessions.some(
-          (s) => s.sessionId && !dbSessionIds.has(s.sessionId),
-        );
-        if (hasNew) return true;
+        const localOnly = localSessions
+          .map((s) => s.sessionId)
+          .filter((id): id is string => !!id && !dbSessionIds.has(id));
+        if (localOnly.length > 0) details.sessions = { localOnly };
       }
     }
   } catch {
@@ -186,10 +262,10 @@ function localStorageDiffersFromDb(dbData: {
         const dbCollectionIds = new Set(
           dbData.collections.map((c) => c.collectionId).filter(Boolean),
         );
-        const hasNew = localCollections.some(
-          (c) => c.collectionId && !dbCollectionIds.has(c.collectionId),
-        );
-        if (hasNew) return true;
+        const localOnly = localCollections
+          .map((c) => c.collectionId)
+          .filter((id): id is string => !!id && !dbCollectionIds.has(id));
+        if (localOnly.length > 0) details.collections = { localOnly };
       }
     }
   } catch {
@@ -206,7 +282,9 @@ function localStorageDiffersFromDb(dbData: {
         localProfile !== null &&
         (localProfile.questionsAnswered > 0 || localProfile.totalXP > 0)
       ) {
-        return true;
+        details.profile = {
+          reason: `local has questionsAnswered=${localProfile.questionsAnswered}, totalXP=${localProfile.totalXP} but DB profile is null`,
+        };
       }
     }
   } catch {
@@ -214,7 +292,11 @@ function localStorageDiffersFromDb(dbData: {
   }
 
   try {
-    // ── Statistics (check if there are answeredQuestions not in DB) ───────────
+    // ── Statistics ────────────────────────────────────────────────────────────
+    // Compare both answeredQuestions count (legacy check) AND
+    // answeredQuestionsDetailed count (new check). DB rows may be in either
+    // the old format (with plainQuestion) or new format (with primary_class_cd).
+    // We compare by count rather than deep content to stay format-agnostic.
     const rawStats = localStorage.getItem("practiceStatistics");
     if (rawStats) {
       const localStats = JSON.parse(rawStats);
@@ -223,18 +305,56 @@ function localStorageDiffersFromDb(dbData: {
           typeof dbData.statistics === "object" && dbData.statistics !== null
             ? (dbData.statistics as Record<
                 string,
-                { answeredQuestions?: string[] }
+                {
+                  answeredQuestions?: string[];
+                  answeredQuestionsDetailed?: unknown[];
+                }
               >)
             : {};
 
+        const statsDetails: NonNullable<LocalDbDiff["details"]["statistics"]> =
+          [];
+
         for (const [assessment, data] of Object.entries(localStats)) {
           const localAnswered: string[] =
-            (data as { answeredQuestions?: string[] }).answeredQuestions ?? [];
+            (
+              data as {
+                answeredQuestions?: string[];
+                answeredQuestionsDetailed?: unknown[];
+              }
+            ).answeredQuestions ?? [];
+
+          const localDetailed: unknown[] =
+            (
+              data as {
+                answeredQuestionsDetailed?: unknown[];
+              }
+            ).answeredQuestionsDetailed ?? [];
+
           const dbAnswered: string[] =
             dbStats[assessment]?.answeredQuestions ?? [];
 
-          if (localAnswered.length > dbAnswered.length) return true;
+          const dbDetailed: unknown[] =
+            dbStats[assessment]?.answeredQuestionsDetailed ?? [];
+
+          // Flag if either the flat ID list OR the detailed list has more
+          // entries locally than in the DB. Use the larger of the two counts
+          // as the representative local count so the UI message is accurate.
+          const localCount = Math.max(
+            localAnswered.length,
+            localDetailed.length,
+          );
+          const dbCount = Math.max(dbAnswered.length, dbDetailed.length);
+
+          if (localCount > dbCount) {
+            statsDetails.push({
+              assessment,
+              localCount,
+              dbCount,
+            });
+          }
         }
+        if (statsDetails.length > 0) details.statistics = statsDetails;
       }
     }
   } catch {
@@ -251,26 +371,24 @@ function localStorageDiffersFromDb(dbData: {
         localVocab !== null &&
         Object.keys(localVocab).length > 0
       ) {
-        return true;
+        details.vocabulary = {
+          reason: `local has ${Object.keys(localVocab).length} vocab entries but DB vocabulary is null`,
+        };
       }
     }
   } catch {
     // ignore parse errors
   }
 
-  return false;
+  return { differs: Object.keys(details).length > 0, details };
 }
 
 // ─── Component ────────────────────────────────────────────────────────────────
 
 export function MigrationChecker() {
   const dispatch = useDispatch<AppDispatch>();
-  const isAuthenticated = useSelector(
-    (state: RootState) => state.auth.isAuthenticated,
-  );
-  const sessionChecked = useSelector(
-    (state: RootState) => state.auth.sessionChecked,
-  );
+  const isAuthenticated = useSelector(selectIsAuthenticated);
+  const sessionChecked = useSelector(selectSessionChecked);
   const isUserDataLoading = useSelector(selectIsUserDataLoading);
 
   const [showPrompt, setShowPrompt] = useState(false);
@@ -279,7 +397,8 @@ export function MigrationChecker() {
   // Track the last user ID for which we ran the check to avoid re-checking
   // when components re-render without the auth state actually changing.
   const checkedForUserId = useRef<string | null>(null);
-  const userId = useSelector((state: RootState) => state.auth.user?.id ?? null);
+  const user = useSelector(selectUser);
+  const userId = user?.id ?? null;
 
   useEffect(() => {
     // Only run after session has been verified and user is authenticated
@@ -290,6 +409,9 @@ export function MigrationChecker() {
     checkedForUserId.current = userId;
 
     async function runMigrationCheck() {
+      // Skip the expensive DB fetch if the check was performed recently
+      if (userId && isSyncCheckFresh(userId)) return;
+
       try {
         // Requirement 11.1 – fetch user data from backend
         const response = await fetch("/api/user/complete-data", {
@@ -311,8 +433,6 @@ export function MigrationChecker() {
         };
         const userData = json.data;
 
-        console.log("userData", userData);
-
         if (!userData) return;
 
         // Requirement 11.2 – check if DB is empty
@@ -328,15 +448,23 @@ export function MigrationChecker() {
 
         if (dbEmpty) {
           // DB has no data — show the initial import prompt if localStorage has data
-          if (!localStorageHasData()) return;
+          if (!localStorageHasData()) {
+            // Nothing to do — stamp so we don't re-check for 5 days
+            if (userId) stampSyncCheck(userId);
+            return;
+          }
+          // Don't stamp here — we want to re-check after migration completes
           setShowPrompt(true);
           return;
         }
 
         // DB already has data — check if localStorage has new/different data
-        if (!localStorageHasData()) return;
+        if (!localStorageHasData()) {
+          if (userId) stampSyncCheck(userId);
+          return;
+        }
 
-        const differs = localStorageDiffersFromDb({
+        const { differs, details } = localStorageDiffersFromDb({
           profile: userData.profile,
           statistics: userData.statistics,
           sessions: (userData.sessions ?? []) as { sessionId?: string }[],
@@ -348,8 +476,15 @@ export function MigrationChecker() {
           preferences: userData.preferences,
         });
 
+        console.debug("[DEBUG] userData complete", userData);
+
         if (differs) {
+          console.debug("[MigrationChecker] localStorage ↔ DB diff:", details);
+          // Don't stamp here either — we want to re-check after sync completes
           setShowSyncPrompt(true);
+        } else {
+          // Data is already in sync — stamp so we don't re-check for 5 days
+          if (userId) stampSyncCheck(userId);
         }
       } catch {
         // Network/parse errors — skip migration check silently
@@ -365,6 +500,7 @@ export function MigrationChecker() {
       checkedForUserId.current = null;
       setShowPrompt(false);
       setShowSyncPrompt(false);
+      clearSyncCheck();
     }
   }, [isAuthenticated]);
 
@@ -373,6 +509,9 @@ export function MigrationChecker() {
     const result = await dispatch(migrateLocalStorageData());
     if (migrateLocalStorageData.fulfilled.match(result)) {
       toast.success("Your data has been imported successfully!");
+      // Stamp and reset so the next login re-checks from a clean slate
+      if (userId) stampSyncCheck(userId);
+      checkedForUserId.current = null;
       return result.payload;
     }
     throw new Error(
@@ -385,6 +524,9 @@ export function MigrationChecker() {
     const result = await dispatch(syncLocalStorageData());
     if (syncLocalStorageData.fulfilled.match(result)) {
       toast.success("Your data has been synced successfully!");
+      // Stamp and reset so the next login re-checks from a clean slate
+      if (userId) stampSyncCheck(userId);
+      checkedForUserId.current = null;
       return result.payload;
     }
     throw new Error((result.payload as string | undefined) ?? "Sync failed");
@@ -413,11 +555,11 @@ export function MigrationChecker() {
         onClose={() => setShowPrompt(false)}
         onMigrate={handleMigrate}
       />
-      {/* <SyncPrompt
+      <SyncPrompt
         isOpen={showSyncPrompt}
         onClose={() => setShowSyncPrompt(false)}
         onSync={handleSync}
-      /> */}
+      />
     </>
   );
 }

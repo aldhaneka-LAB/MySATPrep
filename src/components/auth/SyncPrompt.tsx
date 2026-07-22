@@ -82,18 +82,15 @@ export function SyncPrompt({ isOpen, onClose, onSync }: SyncPromptProps) {
   return (
     /* Backdrop */
     <div
-      className="fixed inset-0  flex items-center justify-center p-4"
+      className="fixed inset-0 z-[200] flex items-center justify-center p-4"
       aria-modal="true"
-      style={{
-        zIndex: 100,
-      }}
       role="dialog"
       aria-labelledby={titleId}
       onKeyDown={handleKeyDown}
     >
       {/* Scrim */}
       <div
-        className="absolute inset-0 bg-black/50 backdrop-blur-sm z-10"
+        className="absolute inset-0 bg-black/50 backdrop-blur-sm"
         aria-hidden="true"
         onClick={state.phase !== "loading" ? handleClose : undefined}
       />
@@ -399,6 +396,18 @@ function SyncSummaryDisplay({ summary }: { summary: MigrationSummary }) {
     {
       label: "Preferences",
       value: summary.preferencesMigrated ? "Synced" : "Skipped",
+    },
+    {
+      label: "Question notes",
+      value: summary.notesMigrated ? "Synced" : "Skipped",
+    },
+    {
+      label: "Answer history",
+      value: summary.answerHistoryMigrated ? "Synced" : "Skipped",
+    },
+    {
+      label: "Vocab performance",
+      value: summary.practicePerformanceMigrated ? "Synced" : "Skipped",
     },
   ];
 

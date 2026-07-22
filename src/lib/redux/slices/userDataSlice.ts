@@ -59,6 +59,18 @@ export const fetchUserData = createAsyncThunk<UserData | null, void>(
       );
     }
   },
+  {
+    // Skip dispatch entirely if data is already initialized or a fetch is in-flight.
+    // This prevents duplicate network requests from React StrictMode double-mounts
+    // or any other re-render that re-triggers the SessionInitializer effect.
+    condition: (_, { getState }) => {
+      const state = getState() as { userData: UserDataState };
+      const { dataInitialized, loading } = state.userData;
+      if (dataInitialized) return false;
+      if (loading.profile) return false; // fetch already in-flight
+      return true;
+    },
+  },
 );
 
 /**
@@ -114,32 +126,60 @@ export const updateUserStatistics = createAsyncThunk<
   "userData/updateUserStatistics",
   async (statisticsData, { rejectWithValue }) => {
     try {
-      const response = await fetch("/api/user/statistics", {
-        method: "PUT",
-        headers: { "Content-Type": "application/json" },
-        credentials: "include",
-        body: JSON.stringify(statisticsData),
-      });
-
-      if (response.status === 401) {
-        throw new Error("Unauthorized");
+      // The API expects one request per assessment with the shape:
+      // { assessment, answeredQuestions, answeredQuestionsDetailed, statistics }
+      // statisticsData is a PracticeStatistics map keyed by assessment name,
+      // so we send one PUT per assessment entry.
+      const assessments = Object.keys(statisticsData);
+      if (assessments.length === 0) {
+        return statisticsData;
       }
 
-      if (!response.ok) {
-        const json = (await response.json().catch(() => ({}))) as {
+      const merged: PracticeStatistics = {};
+
+      for (const assessment of assessments) {
+        const assessmentData = statisticsData[assessment];
+
+        const payload = {
+          assessment,
+          answeredQuestions: assessmentData.answeredQuestions,
+          answeredQuestionsDetailed: assessmentData.answeredQuestionsDetailed,
+          statistics: assessmentData.statistics,
+        };
+
+        const response = await fetch("/api/user/statistics", {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          credentials: "include",
+          body: JSON.stringify(payload),
+        });
+
+        if (response.status === 401) {
+          throw new Error("Unauthorized");
+        }
+
+        if (!response.ok) {
+          const json = (await response.json().catch(() => ({}))) as {
+            error?: string;
+          };
+          throw new Error(
+            json.error ?? `Failed to update statistics: ${response.status}`,
+          );
+        }
+
+        const json = (await response.json()) as {
+          data?: { statistics?: PracticeStatistics };
           error?: string;
         };
-        throw new Error(
-          json.error ?? `Failed to update statistics: ${response.status}`,
-        );
+
+        // Merge the returned assessment data back into the result
+        const returned = json.data?.statistics;
+        if (returned) {
+          Object.assign(merged, returned);
+        }
       }
 
-      const json = (await response.json()) as {
-        data?: unknown;
-        summary?: unknown;
-        error?: string;
-      };
-      return json.data as PracticeStatistics;
+      return Object.keys(merged).length > 0 ? merged : statisticsData;
     } catch (error) {
       return rejectWithValue(
         error instanceof Error ? error.message : "Failed to update statistics",
@@ -347,11 +387,15 @@ export const createCollection = createAsyncThunk<
     }
 
     const json = (await response.json()) as {
-      data?: unknown;
-      summary?: unknown;
+      data?: { collection?: SavedCollection };
       error?: string;
     };
-    return json.data as SavedCollection;
+    // API returns { success: true, data: { collection: {...} } }
+    const collection = json.data?.collection;
+    if (!collection) {
+      throw new Error("Invalid response: missing collection data");
+    }
+    return collection;
   } catch (error) {
     return rejectWithValue(
       error instanceof Error ? error.message : "Failed to create collection",
@@ -391,11 +435,15 @@ export const updateCollectionThunk = createAsyncThunk<
       }
 
       const json = (await response.json()) as {
-        data?: unknown;
-        summary?: unknown;
+        data?: { collection?: SavedCollection };
         error?: string;
       };
-      return json.data as SavedCollection;
+      // API returns { success: true, data: { collection: {...} } }
+      const collection = json.data?.collection;
+      if (!collection) {
+        throw new Error("Invalid response: missing collection data");
+      }
+      return collection;
     } catch (error) {
       return rejectWithValue(
         error instanceof Error ? error.message : "Failed to update collection",
@@ -626,6 +674,24 @@ export const migrateLocalStorageData = createAsyncThunk<MigrationSummary, void>(
       }
     })();
 
+    const questionNotes = (() => {
+      try {
+        const raw = localStorage.getItem("questionNotes");
+        return raw ? JSON.parse(raw) : null;
+      } catch {
+        return null;
+      }
+    })();
+
+    const answerHistory = (() => {
+      try {
+        const raw = localStorage.getItem("answerHistory");
+        return raw ? JSON.parse(raw) : null;
+      } catch {
+        return null;
+      }
+    })();
+
     const payload = {
       ...(profile ? { profile } : {}),
       ...(statistics ? { statistics } : {}),
@@ -634,6 +700,8 @@ export const migrateLocalStorageData = createAsyncThunk<MigrationSummary, void>(
       collections: collections ?? [],
       ...(vocabulary ? { vocabulary } : {}),
       ...(preferences ? { preferences } : {}),
+      ...(questionNotes ? { questionNotes } : {}),
+      ...(answerHistory ? { answerHistory } : {}),
       ...(practicePerformance ? { practicePerformance } : {}),
     };
 
@@ -663,7 +731,10 @@ export const migrateLocalStorageData = createAsyncThunk<MigrationSummary, void>(
       };
       const summary = json.summary as MigrationSummary;
 
-      // After successful migration, refresh user data from the database
+      // After successful migration, reset the initialized flag so the
+      // fetchUserData condition guard allows the re-fetch to proceed, then
+      // refresh Redux state from the freshly written database rows.
+      dispatch(userDataSlice.actions.resetDataInitialized());
       dispatch(fetchUserData());
 
       return summary;
@@ -699,15 +770,46 @@ export const syncLocalStorageData = createAsyncThunk<
   "userData/syncLocalStorageData",
   async (_, { getState, dispatch, rejectWithValue }) => {
     const state = getState();
-    const {
-      profile,
-      statistics,
-      sessions,
-      bookmarks,
-      collections,
-      vocabulary,
-      preferences,
-    } = state.userData;
+    const { profile, statistics, preferences } = state.userData;
+
+    // The four lazy fields (sessions, bookmarks, collections, vocabulary) are
+    // NOT populated by fetchUserData (/api/user/data). We need the real DB
+    // values to merge against, so fetch them now if they haven't been loaded
+    // yet (i.e. the user hasn't visited the pages that trigger lazy fetches).
+    let sessions = state.userData.sessions;
+    let bookmarks = state.userData.bookmarks;
+    let collections = state.userData.collections;
+    let vocabulary = state.userData.vocabulary;
+
+    // Always fetch complete DB data before merging — we need the real DB state
+    // for bookmarks, collections, sessions, and vocabulary to avoid wiping DB
+    // rows that haven't been loaded into Redux yet (e.g. the user hasn't
+    // visited the bookmarks page this session).
+    try {
+      const res = await fetch("/api/user/complete-data", {
+        method: "GET",
+        credentials: "include",
+      });
+      if (res.ok) {
+        const json = (await res.json()) as {
+          data?: {
+            sessions?: typeof sessions;
+            bookmarks?: typeof bookmarks;
+            collections?: typeof collections;
+            vocabulary?: typeof vocabulary;
+          };
+        };
+        if (json.data) {
+          sessions = json.data.sessions ?? sessions;
+          bookmarks = json.data.bookmarks ?? bookmarks;
+          collections = json.data.collections ?? collections;
+          vocabulary = json.data.vocabulary ?? vocabulary;
+        }
+      }
+    } catch {
+      // Network failure — fall back to whatever Redux has. The DB-side upserts
+      // are idempotent, so no data is lost; we just may not merge stale DB rows.
+    }
     const localProfile = (() => {
       try {
         const raw = localStorage.getItem("userProfile");
@@ -789,6 +891,15 @@ export const syncLocalStorageData = createAsyncThunk<
       try {
         const raw = localStorage.getItem("practicePerformanceData");
         return raw ? (JSON.parse(raw) as PracticePerformanceData) : null;
+      } catch {
+        return null;
+      }
+    })();
+
+    const localQuestionNotes = (() => {
+      try {
+        const raw = localStorage.getItem("questionNotes");
+        return raw ? (JSON.parse(raw) as QuestionNotes) : null;
       } catch {
         return null;
       }
@@ -1027,6 +1138,54 @@ export const syncLocalStorageData = createAsyncThunk<
       } satisfies PracticePerformanceData;
     })();
 
+    // Question notes: merge by questionId key — union of per-question note
+    // arrays, deduped by note content. Local notes take precedence on conflict.
+    const mergedQuestionNotes = (() => {
+      const dbNotes = state.userData.questionNotes ?? {};
+      const lsNotes = localQuestionNotes ?? {};
+      if (!Object.keys(dbNotes).length && !Object.keys(lsNotes).length)
+        return null;
+
+      const allKeys = new Set([
+        ...Object.keys(dbNotes),
+        ...Object.keys(lsNotes),
+      ]);
+      const result: QuestionNotes = {};
+      for (const questionId of allKeys) {
+        const dbEntries = Array.isArray(
+          (dbNotes as Record<string, unknown>)[questionId],
+        )
+          ? ((dbNotes as Record<string, unknown[]>)[questionId] as unknown[])
+          : [];
+        const lsEntries = Array.isArray(
+          (lsNotes as Record<string, unknown>)[questionId],
+        )
+          ? ((lsNotes as Record<string, unknown[]>)[questionId] as unknown[])
+          : [];
+        // Union: local entries first (most recent edits), db entries fill in the rest
+        const seen = new Set<string>();
+        const merged: unknown[] = [];
+        for (const entry of [...lsEntries, ...dbEntries]) {
+          const key = JSON.stringify(entry);
+          if (!seen.has(key)) {
+            seen.add(key);
+            merged.push(entry);
+          }
+        }
+        result[questionId as keyof typeof result] = merged as never;
+      }
+      return result;
+    })();
+
+    // Answer history: merge by questionId key — union per-question attempt
+    // arrays. Answer history is never stored in localStorage; we just carry
+    // the Redux (DB) copy through so it isn't dropped from the sync payload.
+    const mergedAnswerHistory = (() => {
+      const dbHistory = state.userData.answerHistory ?? {};
+      if (!Object.keys(dbHistory).length) return null;
+      return dbHistory;
+    })();
+
     // ── Build sync payload ──────────────────────────────────────────────────
     const payload = {
       ...(mergedProfile ? { profile: mergedProfile } : {}),
@@ -1038,6 +1197,8 @@ export const syncLocalStorageData = createAsyncThunk<
       collections: mergedCollections,
       ...(mergedVocabulary ? { vocabulary: mergedVocabulary } : {}),
       ...(mergedPreferences ? { preferences: mergedPreferences } : {}),
+      ...(mergedQuestionNotes ? { questionNotes: mergedQuestionNotes } : {}),
+      ...(mergedAnswerHistory ? { answerHistory: mergedAnswerHistory } : {}),
       ...(mergedPracticePerformance
         ? { practicePerformance: mergedPracticePerformance }
         : {}),
@@ -1069,7 +1230,10 @@ export const syncLocalStorageData = createAsyncThunk<
       };
       const summary = json.summary as MigrationSummary;
 
-      // After successful sync, refresh user data from the database
+      // After successful sync, reset the initialized flag so the
+      // fetchUserData condition guard allows the re-fetch to proceed, then
+      // refresh Redux state from the freshly written database rows.
+      dispatch(userDataSlice.actions.resetDataInitialized());
       dispatch(fetchUserData());
 
       return summary;
@@ -1180,28 +1344,39 @@ export const fetchSessions = createAsyncThunk<PracticeSession[], void>(
 export const fetchBookmarksAndCollections = createAsyncThunk<
   { bookmarks: SavedQuestion[]; collections: SavedCollection[] },
   void
->("userData/fetchBookmarksAndCollections", async (_, { rejectWithValue }) => {
-  try {
-    const response = await fetch("/api/user/bookmarks", {
-      method: "GET",
-      credentials: "include",
-    });
-    if (response.status === 401) return rejectWithValue("Unauthorized");
-    if (!response.ok)
-      throw new Error(`Failed to fetch bookmarks: ${response.status}`);
-    const json = (await response.json()) as {
-      data?: { bookmarks?: SavedQuestion[]; collections?: SavedCollection[] };
-    };
-    return {
-      bookmarks: (json.data?.bookmarks ?? []) as SavedQuestion[],
-      collections: (json.data?.collections ?? []) as SavedCollection[],
-    };
-  } catch (error) {
-    return rejectWithValue(
-      error instanceof Error ? error.message : "Failed to fetch bookmarks",
-    );
-  }
-});
+>(
+  "userData/fetchBookmarksAndCollections",
+  async (_, { rejectWithValue }) => {
+    try {
+      const response = await fetch("/api/user/bookmarks", {
+        method: "GET",
+        credentials: "include",
+      });
+      if (response.status === 401) return rejectWithValue("Unauthorized");
+      if (!response.ok)
+        throw new Error(`Failed to fetch bookmarks: ${response.status}`);
+      const json = (await response.json()) as {
+        data?: { bookmarks?: SavedQuestion[]; collections?: SavedCollection[] };
+      };
+      return {
+        bookmarks: (json.data?.bookmarks ?? []) as SavedQuestion[],
+        collections: (json.data?.collections ?? []) as SavedCollection[],
+      };
+    } catch (error) {
+      return rejectWithValue(
+        error instanceof Error ? error.message : "Failed to fetch bookmarks",
+      );
+    }
+  },
+  {
+    // Must not run before fetchUserData/fulfilled has set dataInitialized.
+    // This ensures user identity is established before fetching bookmarks.
+    condition: (_, { getState }) => {
+      const state = getState() as { userData: UserDataState };
+      return state.userData.dataInitialized;
+    },
+  },
+);
 
 /**
  * Fetches vocabulary progress from the server on demand.
@@ -1376,6 +1551,7 @@ const initialState: UserDataState = {
   answerHistory: null,
   questionNotes: null,
   vocabPracticePerformance: null,
+  dataInitialized: false,
   loading: {
     profile: false,
     statistics: false,
@@ -1635,6 +1811,13 @@ const userDataSlice = createSlice({
       state.error = action.payload;
     },
 
+    // Reset dataInitialized flag so fetchUserData will re-run on next dispatch.
+    // Used after a successful migration or sync so the Redux state reflects
+    // the freshly written database rows.
+    resetDataInitialized: (state) => {
+      state.dataInitialized = false;
+    },
+
     // Clear all user data (on logout)
     clearUserData: (state) => {
       state.profile = null;
@@ -1647,6 +1830,7 @@ const userDataSlice = createSlice({
       state.answerHistory = null;
       state.questionNotes = null;
       state.vocabPracticePerformance = null;
+      state.dataInitialized = false;
       state.loading = {
         profile: false,
         statistics: false,
@@ -1696,6 +1880,7 @@ const userDataSlice = createSlice({
           questionNotes: false,
           vocabPracticePerformance: false,
         };
+        state.dataInitialized = true;
         state.error = null;
       })
       .addCase(fetchUserData.rejected, (state, action) => {
@@ -2121,6 +2306,7 @@ export const {
   setDataLoading,
   setDataError,
   clearUserData,
+  resetDataInitialized,
 } = userDataSlice.actions;
 
 // Alias: updateCollection → updateCollectionLocal (sync reducer)

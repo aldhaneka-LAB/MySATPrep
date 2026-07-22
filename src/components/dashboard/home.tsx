@@ -78,8 +78,19 @@ export function HomeTab({ selectedAssessment }: HomeTabProps) {
   const [localStats, setLocalStats] = useState<PracticeStatistics | null>(null);
   const [localHistory, setLocalHistory] = useState<PracticeSession[]>([]);
 
-  const [activityMetrics, setActivityMetrics] = useState<Metric[]>([]);
-  const [streakDays, setStreakDays] = useState<number>(0);
+  // ── Server-derived total time (authenticated only) ─────────────────────────
+  const [serverTotalTimeMs, setServerTotalTimeMs] = useState<number | null>(
+    null,
+  );
+
+  // ── Server-derived success rate (authenticated only) ──────────────────────
+  const [serverSuccessRate, setServerSuccessRate] = useState<number | null>(
+    null,
+  );
+
+  // ── Loading flags for server fetches ──────────────────────────────────────
+  const [isLoadingTime, setIsLoadingTime] = useState(false);
+  const [isLoadingSuccessRate, setIsLoadingSuccessRate] = useState(false);
 
   // ── Resolved data: Redux when authenticated, localStorage otherwise ─────────
   const userProfile = isAuthenticated ? reduxProfile : localProfile;
@@ -107,31 +118,100 @@ export function HomeTab({ selectedAssessment }: HomeTabProps) {
       setLocalProfile(getUserProfile());
       setLocalStats(getPracticeStatistics());
       setLocalHistory(getSessionHistory());
-    } catch (err) {
-      console.error("Error loading local user data:", err);
+    } catch {
+      // ignore localStorage read errors
     }
   }, [isAuthenticated]);
 
-  // ── Recompute ActivityCard metrics whenever resolved data changes ──────────
+  // ── Fetch server-side total time for authenticated users ───────────────────
   useEffect(() => {
-    const profile = userProfile;
-    const history = practiceHistory;
-    if (!profile) return;
+    if (!isAuthenticated) return;
+    setIsLoadingTime(true);
+    fetch("/api/user/sessions/time-spent")
+      .then(
+        (res) =>
+          res.json() as Promise<{
+            success?: boolean;
+            data?: { totalTimeSpentMs?: number };
+          }>,
+      )
+      .then((json) => {
+        if (json?.success && typeof json.data?.totalTimeSpentMs === "number") {
+          setServerTotalTimeMs(json.data.totalTimeSpentMs);
+        }
+      })
+      .catch(() => {
+        // silently fall back to Redux-derived value
+      })
+      .finally(() => setIsLoadingTime(false));
+  }, [isAuthenticated]);
 
-    const totalTimeMs = calculateTotalTimeSpent(history);
+  // ── Fetch server-side success rate for authenticated users ─────────────────
+  useEffect(() => {
+    if (!isAuthenticated) return;
+    setIsLoadingSuccessRate(true);
+    fetch("/api/user/profile/success-rate")
+      .then(
+        (res) =>
+          res.json() as Promise<{
+            success?: boolean;
+            data?: { successRate?: number };
+          }>,
+      )
+      .then((json) => {
+        if (json?.success && typeof json.data?.successRate === "number") {
+          setServerSuccessRate(json.data.successRate);
+        }
+      })
+      .catch(() => {
+        // silently fall back to Redux-derived value
+      })
+      .finally(() => setIsLoadingSuccessRate(false));
+  }, [isAuthenticated]);
+
+  // ── Derived metrics — useMemo instead of useState+useEffect to avoid an
+  //    extra render cycle every time userProfile or practiceHistory change ──────
+  const streakDays = useMemo(
+    () => calculateStreakDays(practiceHistory),
+    [practiceHistory],
+  );
+
+  const activityMetrics = useMemo<Metric[]>(() => {
+    if (!userProfile) return [];
+    // Authenticated: prefer server-aggregated value; fall back to Redux sessions
+    // while the fetch is still in-flight (serverTotalTimeMs === null).
+    // Unauthenticated: sum from localStorage history.
+    const totalTimeMs = isAuthenticated
+      ? (serverTotalTimeMs ?? calculateTotalTimeSpent(practiceHistory))
+      : calculateTotalTimeSpent(practiceHistory);
     const totalTimeMin = Math.round(totalTimeMs / (1000 * 60));
-    const streak = calculateStreakDays(history);
-    setStreakDays(streak);
-
-    setActivityMetrics([
-      {
-        label: "Total XP",
-        value: profile.totalXP.toString(),
-        trend: Math.round(Math.min(100, (profile.totalXP / 1000) * 100)),
-        unit: "XP",
-        color: "#FF2D55",
-        prefix: "",
-      },
+    const successRate = isAuthenticated
+      ? (serverSuccessRate ??
+        ((userProfile.questionsAnswered ?? 0) > 0
+          ? Math.round(
+              ((userProfile.correctAnswers ?? 0) /
+                userProfile.questionsAnswered) *
+                100,
+            )
+          : 0))
+      : (userProfile.questionsAnswered ?? 0) > 0
+        ? Math.round(
+            ((userProfile.correctAnswers ?? 0) /
+              userProfile.questionsAnswered) *
+              100,
+          )
+        : 0;
+    return [
+      // {
+      //   label: "Total XP",
+      //   value: (userProfile.totalXP ?? 0).toString(),
+      //   trend: Math.round(
+      //     Math.min(100, ((userProfile.totalXP ?? 0) / 1000) * 100),
+      //   ),
+      //   unit: "XP",
+      //   color: "#FF2D55",
+      //   prefix: "",
+      // },
       {
         label: "Practice Time",
         value: totalTimeMin.toString(),
@@ -142,24 +222,20 @@ export function HomeTab({ selectedAssessment }: HomeTabProps) {
       },
       {
         label: "Success Rate",
-        value:
-          profile.questionsAnswered > 0
-            ? Math.round(
-                (profile.correctAnswers / profile.questionsAnswered) * 100,
-              ).toString()
-            : "0",
-        trend:
-          profile.questionsAnswered > 0
-            ? Math.round(
-                (profile.correctAnswers / profile.questionsAnswered) * 100,
-              )
-            : 0,
+        value: successRate.toString(),
+        trend: successRate,
         unit: "%",
         color: "#007AFF",
         prefix: "",
       },
-    ]);
-  }, [userProfile, practiceHistory]);
+    ];
+  }, [
+    userProfile,
+    practiceHistory,
+    isAuthenticated,
+    serverTotalTimeMs,
+    serverSuccessRate,
+  ]);
   return (
     <div className="space-y-4 grid grid-cols-7">
       <div className="px-4 col-span-7 md:col-span-4 xl:col-span-5 space-y-4">
@@ -282,7 +358,10 @@ export function HomeTab({ selectedAssessment }: HomeTabProps) {
         <ActivityCard
           externalMetrics={activityMetrics}
           externalStreakDays={streakDays}
-          onViewDetails={() => console.log("Viewing details")}
+          onViewDetails={() => {}}
+          isLoadingMetrics={
+            isAuthenticated && (isLoadingTime || isLoadingSuccessRate)
+          }
         />
       </div>
     </div>

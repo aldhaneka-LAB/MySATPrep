@@ -55,11 +55,6 @@ export async function GET(request: NextRequest) {
       .map((id) => id.trim());
   }
 
-  // console.log("domains", domainsParam);
-  // console.log("assessment", assessment);
-  // console.log("random", random);
-  // console.log("excludeQuestionIds", excludeQuestionIds);
-
   if (random == "true") {
   }
 
@@ -175,42 +170,11 @@ export async function GET(request: NextRequest) {
           success: boolean;
           data?: API_Response_Question_List;
         };
-        // if (internalData.success && internalData.data) {
-        //   const seenExternalIds = new Set<string>();
-        //   const seenIbns = new Set<string>();
+        // console.log("questions length", questions?.length);
 
-        //   for (const question of questions) {
-        //     const { externalId, ibn } = questionDedupKey(question);
+        questions = [...questions, ...(internalData.data || [])];
 
-        //     if (externalId) seenExternalIds.add(externalId);
-        //     if (ibn) seenIbns.add(ibn);
-        //   }
-
-        //   console.log("seenExternalIds", seenExternalIds);
-        //   console.log("seenIbns", seenIbns);
-
-        //   const uniqueInternalQuestions = internalData.data.filter(
-        //     (question) => {
-        //       const { externalId, ibn } = questionDedupKey(question);
-
-        //       const alreadySeen =
-        //         (externalId !== null && seenExternalIds.has(externalId)) ||
-        //         (ibn !== null && seenIbns.has(ibn));
-
-        //       if (alreadySeen) {
-        //         return false;
-        //       }
-
-        //       if (externalId) seenExternalIds.add(externalId);
-        //       if (ibn) seenIbns.add(ibn);
-
-        //       return true;
-        //     },
-        //   );
-
-        //   questions = [...questions, ...uniqueInternalQuestions];
-        // }
-        questions = [...questions, ...(internalData.data ?? [])];
+        // console.log("internalData.data length", internalData.data?.length);
       }
     } catch (internalError) {
       console.warn(
@@ -229,6 +193,44 @@ export async function GET(request: NextRequest) {
       { status: 500 },
     );
   }
+
+  let uniqueQuestions: API_Response_Question_List = [];
+  let counter = 0;
+  // console.log("questions length before deduplication", questions.length);
+
+  if (questions.length > 0) {
+    const seenExternalIds = new Set<string>();
+    const seenIbns = new Set<string>();
+
+    for (const question of questions) {
+      const { externalId, ibn } = questionDedupKey(question);
+
+      // console.log("Checking question:", { externalId, ibn });
+
+      const alreadySeen =
+        (externalId !== null && seenExternalIds.has(externalId)) ||
+        (ibn !== null && seenIbns.has(ibn));
+
+      if (!alreadySeen) {
+        // uniqueQuestions.push(question);
+        // if (externalId) seenExternalIds.add(externalId);
+        // if (ibn) seenIbns.add(ibn);
+        uniqueQuestions.push(question);
+        if (externalId) seenExternalIds.add(externalId);
+        if (ibn) seenIbns.add(ibn);
+      } else {
+        // console.log("Duplicate question found, skipping:", { externalId, ibn });
+
+        counter += 1;
+      }
+    }
+  }
+
+  // console.log("Counter ", counter, "questions filtered out due to duplicates");
+  // console.log("uniqueQuestions", uniqueQuestions.length, "after deduplication");
+  // console.log("questions", questions);
+  questions = uniqueQuestions;
+  // console.log("questions ", questions.length, "after deduplication");
 
   try {
     if (excludeQuestionIds.length > 0) {

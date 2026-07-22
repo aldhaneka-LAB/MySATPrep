@@ -21,6 +21,7 @@ import {
   addBookmark as addBookmarkAction,
   removeBookmark as removeBookmarkAction,
   updateCollectionLocal,
+  addCollection as addCollectionAction,
 } from "@/lib/redux/slices/userDataSlice";
 import {
   saveBookmark,
@@ -82,16 +83,11 @@ export function SaveButton({
 
   // Migrate collections that don't have questionDetails (backward compatibility)
   const migratedCollections = allCollections.map((collection, index) => {
-    if (!collection.questionDetails) {
-      return {
-        ...collection,
-        id: collection.id || `collection_${index}_${Date.now()}`, // Ensure id exists
-        questionDetails: [], // Initialize empty array for legacy collections
-      };
-    }
     return {
       ...collection,
       id: collection.id || `collection_${index}_${Date.now()}`, // Ensure id exists
+      questionIds: collection.questionIds ?? [], // Ensure questionIds is always an array
+      questionDetails: collection.questionDetails ?? [], // Ensure questionDetails is always an array
     };
   });
 
@@ -242,6 +238,21 @@ export function SaveButton({
         [newCollection.id]: newCollection,
       };
       setSavedCollections(updatedCollections);
+      // Optimistic update for authenticated users
+      if (isAuthenticated) {
+        reduxDispatch(
+          addCollectionAction({
+            collectionId: newCollection.id,
+            name: newCollection.name,
+            description: newCollection.description,
+            createdAt: newCollection.createdAt,
+            updatedAt: newCollection.updatedAt,
+            questionIds: newCollection.questionIds,
+            questionDetails: newCollection.questionDetails,
+            color: newCollection.color,
+          }),
+        );
+      }
       // Sync: API for authenticated users, localStorage for unauthenticated
       saveCollection(
         { ...newCollection, collectionId: newCollection.id },

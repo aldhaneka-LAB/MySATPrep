@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useMemo } from "react";
+import { useCallback, useMemo, useState, useEffect, useRef } from "react";
 import { useLocalStorage } from "@/lib/useLocalStorage";
 import { useAppDispatch, useAppSelector } from "@/lib/redux/hooks";
 import {
@@ -30,9 +30,11 @@ import type {
   SavedCollection,
 } from "@/types/savedCollections";
 import type { UserProfileWithHistory } from "@/types/userProfile";
+import type { PlainQuestionType } from "@/types/question";
 
 import type { SavedQuestion as ReduxSavedQuestion } from "@/lib/types/userData";
 import type { SavedCollection as ReduxSavedCollection } from "@/lib/types/userData";
+import { reconstructPlainQuestion } from "@/lib/db/bookmarkTransforms";
 
 const DEFAULT_VOCABS_DATA: VocabsData = {
   learntVocabs: [],
@@ -55,7 +57,33 @@ function bookmarksToSavedQuestions(
   return bookmarks.reduce<SavedQuestions>((acc, bookmark) => {
     const key = bookmark.assessment;
     if (!acc[key]) acc[key] = [];
-    acc[key].push(bookmark as SavedQuestion);
+
+    // Reconstruct a PlainQuestionType-compatible object from whatever is stored
+    // in plain_question. Handles two shapes transparently:
+    //   A) New rows — slim { primary_class_cd, skill_cd, difficulty }
+    //   B) Old rows — full PlainQuestionType (returned as-is, nothing breaks)
+    //   C) null     — bookmark was saved without metadata (plainQuestion = undefined)
+    //
+    // All three consumer paths (saved.tsx filter, saved.tsx / previousSaved.tsx
+    // card rendering, review/page.tsx session building) only read:
+    //   primary_class_cd, skill_cd, difficulty
+    // from the reconstructed object, so unused fields default to "" or 0 safely.
+    const plainQuestion = reconstructPlainQuestion({
+      questionId: bookmark.questionId,
+      externalId: bookmark.externalId,
+      ibn: bookmark.ibn,
+      storedMeta: bookmark.plainQuestion as
+        | PlainQuestionType
+        | {
+            primary_class_cd: string;
+            skill_cd: string;
+            difficulty: "E" | "M" | "H";
+          }
+        | null
+        | undefined,
+    });
+
+    acc[key].push({ ...bookmark, plainQuestion } as SavedQuestion);
     return acc;
   }, {});
 }
@@ -71,8 +99,8 @@ function collectionsToSavedCollections(
       description: col.description,
       createdAt: col.createdAt,
       updatedAt: col.updatedAt,
-      questionIds: col.questionIds,
-      questionDetails: col.questionDetails.map((d) => ({
+      questionIds: col.questionIds ?? [], // guard against undefined from server
+      questionDetails: (col.questionDetails ?? []).map((d) => ({
         questionId: d.questionId,
         externalId: d.externalId ?? null,
         ibn: d.ibn ?? null,
@@ -180,8 +208,9 @@ export function useResolvedBookmarks(): [
 
 /**
  * Returns [savedCollections, setSavedCollections].
- * Authenticated reads from Redux collections; writes only affect localStorage
- * (individual collection ops should use dataSync).
+ * Authenticated: reads from Redux collections; writes keep an optimistic local
+ * overlay so the UI reflects changes immediately before Redux catches up.
+ * Unauthenticated: reads/writes localStorage.
  */
 export function useResolvedCollections(): [
   SavedCollections,
@@ -192,17 +221,40 @@ export function useResolvedCollections(): [
   const [localCollections, setLocalCollections] =
     useLocalStorage<SavedCollections>("savedCollections", {});
 
+  // Optimistic overlay for authenticated users: keeps the last value written by
+  // the component so the UI doesn't flash back to stale Redux data while the
+  // thunk is in-flight. Once Redux updates (reduxCollections changes), we clear
+  // the overlay so the authoritative value takes over.
+  const [authOverlay, setAuthOverlay] = useState<SavedCollections | null>(null);
+  const prevReduxRef = useRef(reduxCollections);
+
+  useEffect(() => {
+    // When Redux resolves a new value (length or content changed), drop the
+    // optimistic overlay so we show the server-confirmed state.
+    if (prevReduxRef.current !== reduxCollections) {
+      prevReduxRef.current = reduxCollections;
+      setAuthOverlay(null);
+    }
+  }, [reduxCollections]);
+
+  const reduxDerived = useMemo(
+    () => collectionsToSavedCollections(reduxCollections),
+    [reduxCollections],
+  );
+
   const savedCollections = useMemo(
-    () =>
-      isAuthenticated
-        ? collectionsToSavedCollections(reduxCollections)
-        : localCollections,
-    [isAuthenticated, reduxCollections, localCollections],
+    () => (isAuthenticated ? (authOverlay ?? reduxDerived) : localCollections),
+    [isAuthenticated, authOverlay, reduxDerived, localCollections],
   );
 
   const setSavedCollections = useCallback(
     (value: SavedCollections) => {
-      if (!isAuthenticated) setLocalCollections(value);
+      if (isAuthenticated) {
+        // Optimistically show the new value while the Redux thunk is in-flight
+        setAuthOverlay(value);
+      } else {
+        setLocalCollections(value);
+      }
     },
     [isAuthenticated, setLocalCollections],
   );

@@ -19,6 +19,7 @@ import {
   registerWithEmail as apiRegisterWithEmail,
   logout as apiLogout,
   checkSession as apiCheckSession,
+  ConnectionTimeoutError,
 } from "@/lib/api/authClient";
 
 // ─── Async Thunks ────────────────────────────────────────────────────────────
@@ -95,16 +96,34 @@ export const logout = createAsyncThunk<void, void>(
  * Checks the current session on app load and restores auth state if valid.
  * Validates: Requirements 10.2, 10.3, 10.6, 4.7
  */
-export const checkSession = createAsyncThunk<User | null, void>(
+export const checkSession = createAsyncThunk<
+  User | null,
+  void,
+  { rejectValue: { message: string; isConnectionError: boolean } }
+>(
   "auth/checkSession",
   async (_, { rejectWithValue }) => {
     try {
       return await apiCheckSession();
     } catch (error) {
-      return rejectWithValue(
-        error instanceof Error ? error.message : "Session check failed",
-      );
+      const isConnectionError = error instanceof ConnectionTimeoutError;
+      return rejectWithValue({
+        message:
+          error instanceof Error ? error.message : "Session check failed",
+        isConnectionError,
+      });
     }
+  },
+  {
+    // Skip if already checked or currently checking.
+    // Guards against React StrictMode double-mount and any other re-trigger.
+    condition: (_, { getState }) => {
+      const { sessionChecked, loading } = (getState() as { auth: AuthState })
+        .auth;
+      if (sessionChecked) return false;
+      if (loading) return false; // check already in-flight
+      return true;
+    },
   },
 );
 
@@ -117,6 +136,7 @@ const initialState: AuthState = {
   loading: false,
   error: null,
   sessionChecked: false,
+  connectionError: false,
 };
 
 // Auth slice with reducers and extraReducers for async thunks
@@ -154,6 +174,12 @@ const authSlice = createSlice({
     // Mark session as checked (used on app initialization)
     setSessionChecked: (state, action: PayloadAction<boolean>) => {
       state.sessionChecked = action.payload;
+    },
+
+    // Clear the connection error flag (e.g. when user initiates a retry)
+    clearConnectionError: (state) => {
+      state.connectionError = false;
+      state.error = null;
     },
   },
   extraReducers: (builder) => {
@@ -217,7 +243,11 @@ const authSlice = createSlice({
         state.isAuthenticated = false;
         state.loading = false;
         state.error = null;
-        state.sessionChecked = false;
+        // Keep sessionChecked = true: the session IS checked, result is "not authenticated".
+        // Setting it to false would cause DashboardLoadingGuard to spin forever
+        // because SessionInitializer only dispatches checkSession on mount and
+        // won't re-run after logout/redirect.
+        state.sessionChecked = true;
       })
       .addCase(logout.rejected, (state, action) => {
         // Even on failure, clear local state for security
@@ -225,6 +255,8 @@ const authSlice = createSlice({
         state.isAuthenticated = false;
         state.loading = false;
         state.error = action.payload as string;
+        // Same as fulfilled: session is resolved (unauthenticated), not pending.
+        state.sessionChecked = true;
       });
 
     // ── checkSession ─────────────────────────────────────────────────────────
@@ -249,14 +281,21 @@ const authSlice = createSlice({
         state.isAuthenticated = false;
         state.loading = false;
         state.sessionChecked = true;
-        state.error = action.payload as string;
+        state.error = action.payload?.message ?? action.error.message ?? null;
+        state.connectionError = action.payload?.isConnectionError ?? false;
       });
   },
 });
 
 // Export actions
-export const { setUser, clearUser, setLoading, setError, setSessionChecked } =
-  authSlice.actions;
+export const {
+  setUser,
+  clearUser,
+  setLoading,
+  setError,
+  setSessionChecked,
+  clearConnectionError,
+} = authSlice.actions;
 
 // Export reducer
 export default authSlice.reducer;

@@ -98,6 +98,23 @@ import {
   selectQuestionNotes,
 } from "@/lib/redux/selectors";
 import { setUiFlag, mergeNotes } from "@/lib/redux/slices/userDataSlice";
+import Fraction from "fraction.js";
+
+const checkAnswerValidity = (
+  userAnswer: string | null | undefined,
+  correctAnswers: string[] | undefined | null,
+): boolean => {
+  if (!userAnswer || !correctAnswers || correctAnswers.length === 0)
+    return false;
+
+  if (Number(userAnswer)) {
+    return correctAnswers
+      .map((e) => Number(new Fraction(e)) || e)
+      .includes(Number(new Fraction(userAnswer)) || userAnswer);
+  }
+
+  return correctAnswers.map((a) => a.trim()).includes(userAnswer.trim());
+};
 
 // Duolingo-styled Loading Spinner Component
 interface DuolingoLoadingSpinnerProps {
@@ -225,138 +242,6 @@ function DuolingoTimer({
   );
 }
 
-// Success Feedback Component
-interface SuccessFeedbackProps {
-  isVisible: boolean;
-  onContinue: () => void;
-}
-
-function SuccessFeedback({ isVisible, onContinue }: SuccessFeedbackProps) {
-  const [dontShowAgain, setDontShowAgain] = React.useState(false);
-
-  // Read authentication state and Redux values
-  const dispatch = useAppDispatch();
-  const isAuthenticated = useAppSelector(selectIsAuthenticated);
-  const reduxHideFlag = useAppSelector(selectUiFlag("hideSuccessFeedback"));
-  const currentPrefs = useAppSelector(selectUserPreferences);
-
-  // Determine whether to hide success feedback:
-  // - For authenticated users: use Redux value; fall back to localStorage only if Redux is false
-  // - For unauthenticated users: read directly from localStorage
-  const hideSuccessFeedback = React.useMemo(() => {
-    if (isAuthenticated) {
-      if (reduxHideFlag) return true;
-      // Fallback: check localStorage when Redux value is false (legacy data before sync)
-      try {
-        return localStorage.getItem("hideSuccessFeedback") === "true";
-      } catch {
-        return false;
-      }
-    }
-    try {
-      return localStorage.getItem("hideSuccessFeedback") === "true";
-    } catch {
-      return false;
-    }
-  }, [isAuthenticated, reduxHideFlag]);
-
-  // Auto-continue if user has opted out
-  // React.useEffect(() => {
-  //   if (isVisible && hideSuccessFeedback) {
-  //     const timeoutId = setTimeout(() => onContinue(), 1000);
-  //     return () => clearTimeout(timeoutId);
-  //   }
-  // }, [isVisible, hideSuccessFeedback, onContinue]);
-
-  const randomMessage = useMemo(() => {
-    return CONGRATULATORY_MESSAGES[
-      Math.floor(Math.random() * CONGRATULATORY_MESSAGES.length)
-    ];
-  }, []);
-
-  const handleContinue = () => {
-    if (dontShowAgain) {
-      // Always write localStorage as an optimistic local mirror
-      try {
-        localStorage.setItem("hideSuccessFeedback", "true");
-      } catch (error) {
-        console.error("Failed to save preference to localStorage:", error);
-      }
-
-      if (isAuthenticated) {
-        // Dispatch Redux update for immediate UI consistency
-        dispatch(setUiFlag({ key: "hideSuccessFeedback", value: true }));
-
-        // Persist to database via the preferences sync layer
-        const updatedPrefs = {
-          ...(currentPrefs ?? {}),
-          uiFlags: {
-            ...(currentPrefs?.uiFlags ?? {}),
-            hideSuccessFeedback: true,
-          },
-        };
-        // We need the current Redux state for debouncedSavePreferences, but since
-        // this runs inside a component we pass a synthetic state reference via the
-        // store. The dispatch reference already has the updated flag committed.
-        // Import store to get the state snapshot at call time.
-        import("@/lib/redux/store").then(({ store }) => {
-          debouncedSavePreferences(updatedPrefs, dispatch, store.getState());
-        });
-      }
-    }
-    onContinue();
-  };
-
-  if (!isVisible || hideSuccessFeedback) return null;
-
-  return (
-    <div className="fixed inset-0 flex items-center justify-center z-50 bg-black/20 dark:bg-black/40">
-      <div className="bg-green-100 dark:bg-green-950 border-4 border-green-200 dark:border-green-800 rounded-3xl p-8 max-w-md w-full mx-4 shadow-2xl">
-        <div className="text-center">
-          <div className="flex items-center justify-center gap-3 mb-6">
-            <CheckCircle className="h-8 w-8 text-green-600 dark:text-green-400" />
-            <h2 className="text-3xl font-bold text-green-800 dark:text-green-200">
-              {randomMessage}
-            </h2>
-          </div>
-
-          {/* Checkbox for "Don't show again" */}
-          <div className="flex items-center justify-center gap-3 mb-4">
-            <Checkbox
-              id="dontShowAgain"
-              checked={dontShowAgain}
-              onCheckedChange={(checked: boolean) => {
-                const isChecked = checked === true;
-                setDontShowAgain(isChecked);
-                // Play appropriate checkbox sound
-                if (isChecked) {
-                  playSound("tap-checkbox-checked.wav");
-                } else {
-                  playSound("tap-checkbox-unchecked.wav");
-                }
-              }}
-              className="border-green-300 dark:border-green-700 data-[state=checked]:bg-green-600 data-[state=checked]:border-green-600"
-            />
-            <label
-              htmlFor="dontShowAgain"
-              className="text-sm text-green-700 dark:text-green-300 cursor-pointer select-none"
-            >
-              Don&apos;t show this again
-            </label>
-          </div>
-
-          <button
-            onClick={handleContinue}
-            className="cursor-pointer w-full bg-green-600 hover:bg-green-700 text-white font-bold text-xl py-4 px-8 rounded-2xl border-b-4 border-green-800 hover:border-green-900 shadow-lg hover:shadow-xl transform transition-all duration-200 active:translate-y-0.5 active:border-b-2"
-          >
-            CONTINUE
-          </button>
-        </div>
-      </div>
-    </div>
-  );
-}
-
 // Exit Confirmation Component
 interface ExitConfirmationProps {
   isVisible: boolean;
@@ -390,7 +275,7 @@ function ExitConfirmation({
   if (!isVisible) return null;
 
   return (
-    <div className="fixed inset-0 flex items-center justify-center z-50 bg-black/20 dark:bg-black/40">
+    <div className="fixed inset-0 flex items-center justify-center z-[200] bg-black/20 dark:bg-black/40">
       <div className="bg-red-50 dark:bg-red-950 border-4 border-red-200 dark:border-red-800 rounded-3xl p-8 max-w-md w-full mx-4 shadow-2xl">
         <div className="text-center">
           <div className="flex items-center justify-center gap-3 mb-6">
@@ -458,7 +343,7 @@ function FinishConfirmation({
   if (!isVisible) return null;
 
   return (
-    <div className="fixed inset-0 flex items-center justify-center z-50 bg-black/20 dark:bg-black/40">
+    <div className="fixed inset-0 flex items-center justify-center z-[200] bg-black/20 dark:bg-black/40">
       <div className="bg-green-50 dark:bg-green-950 border-4 border-green-200 dark:border-green-800 rounded-3xl p-8 max-w-md w-full mx-4 shadow-2xl">
         <div className="text-center">
           <div className="flex items-center justify-center gap-3 mb-6">
@@ -568,7 +453,7 @@ function ShareModal({
   if (!isVisible) return null;
 
   return (
-    <div className="fixed inset-0 flex items-center justify-center z-50 bg-black/20 dark:bg-black/40">
+    <div className="fixed inset-0 flex items-center justify-center z-[200] bg-black/20 dark:bg-black/40">
       <div className="bg-blue-50 dark:bg-blue-950 border-4 border-blue-200 dark:border-blue-800 rounded-3xl p-8 max-w-lg w-full mx-4 shadow-2xl">
         <div className="text-center">
           <div className="flex items-center justify-center gap-3 mb-6">
@@ -748,11 +633,11 @@ const AnswerOptions = React.memo(function AnswerOptions({
       {optionEntries.map(([key, value], index) => {
         const trimmedKey = key.trim();
         const isCorrectAnswer =
-          isAnswerChecked && correctAnswers.includes(trimmedKey);
+          isAnswerChecked && checkAnswerValidity(trimmedKey, correctAnswers);
         const isSelectedWrongAnswer =
           isAnswerChecked &&
           selectedAnswer?.trim() === trimmedKey &&
-          !correctAnswers.includes(trimmedKey);
+          !checkAnswerValidity(trimmedKey, correctAnswers);
         const isSelected = selectedAnswer?.trim() === trimmedKey;
 
         return (
@@ -780,7 +665,7 @@ const AnswerOptions = React.memo(function AnswerOptions({
                     : "cursor-pointer"
               } w-full transition duration-500 ${
                 isAnswerChecked &&
-                (isCorrectAnswer || correctAnswers.includes(key))
+                (isCorrectAnswer || checkAnswerValidity(key, correctAnswers))
                   ? "border-2 border-green-500 bg-green-500/10"
                   : isSelectedWrongAnswer
                     ? "border-2 border-red-500 bg-red-500/10"
@@ -1048,9 +933,10 @@ function appReducer(state: AppState, action: AppAction): AppState {
         disabledOptions: {},
         isAnswerChecked: isReturningToPreviousQuestion,
         isAnswerCorrect: isReturningToPreviousQuestion
-          ? state.questions?.[newStep]?.correct_answer
-              .map((answer) => answer.trim())
-              .includes(previousAnswer?.trim() || "") || false
+          ? checkAnswerValidity(
+              previousAnswer,
+              state.questions?.[newStep]?.correct_answer,
+            )
           : false,
         questionStartTime: Date.now(), // Always start from current time
         currentQuestionElapsedTime: isReturningToInProgress
@@ -1364,7 +1250,7 @@ export default function PracticeRushMultistep({
           ? question.correct_answer
           : [question.correct_answer];
 
-        if (correctAnswers.map((e) => e.trim()).includes(userAnswer)) {
+        if (checkAnswerValidity(userAnswer, correctAnswers)) {
           correctAnswersCount++;
         }
       }
@@ -1522,10 +1408,8 @@ export default function PracticeRushMultistep({
         dispatch({ type: "SET_SELECTED_ANSWER", payload: savedAnswer });
 
         // Check if the answer was correct
-        const correctAnswers = currentQuestion.correct_answer.map((e) =>
-          e.trim(),
-        );
-        const isCorrect = correctAnswers.includes(savedAnswer.trim());
+        const correctAnswers = currentQuestion.correct_answer;
+        const isCorrect = checkAnswerValidity(savedAnswer, correctAnswers);
 
         // Set answer as checked with correct status
         dispatch({
@@ -1702,7 +1586,7 @@ export default function PracticeRushMultistep({
                 ? question.correct_answer
                 : [question.correct_answer];
 
-              if (correctAnswers.map((e) => e.trim()).includes(userAnswer)) {
+              if (checkAnswerValidity(userAnswer, correctAnswers)) {
                 correctAnswersCount++;
               }
             }
@@ -1800,7 +1684,7 @@ export default function PracticeRushMultistep({
           ? question.correct_answer
           : [question.correct_answer];
 
-        if (correctAnswers.map((e) => e.trim()).includes(userAnswer)) {
+        if (checkAnswerValidity(userAnswer, correctAnswers)) {
           correctAnswersCount++;
         }
       }
@@ -2204,9 +2088,35 @@ export default function PracticeRushMultistep({
 
           dispatch({ type: "SET_CURRENT_STEP", payload: 3 });
 
-          // Extract plain questions from answered question details
+          // Extract plain questions from answered question details.
+          // DB rows written after the schema change no longer carry plainQuestion.
+          // Build a minimal PlainQuestionType from questionId / externalId / ibn
+          // so fetchQuestionDetails can call the question bank API.
           const validPlainQuestions = answeredQuestionDetails
-            .map((item) => item.plainQuestion)
+            .map((item) => {
+              // Prefer legacy plainQuestion if the old row still has it
+              if (item.plainQuestion) return item.plainQuestion;
+              // New rows: reconstruct the minimum needed for the API fetch
+              const id = item.externalId ?? item.ibn ?? "";
+              if (!id) return null;
+              return {
+                questionId: item.questionId,
+                external_id: item.externalId ?? null,
+                ibn: item.ibn ?? null,
+                primary_class_cd: "" as import("@/types/lookup").DomainItems,
+                primary_class_cd_desc: "",
+                skill_cd: "" as import("@/types/lookup").SkillCd_Variants,
+                skill_desc: "",
+                difficulty:
+                  "M" as import("@/types/question").QuestionDifficulty,
+                program: "",
+                pPcc: "",
+                uId: "",
+                score_band_range_cd: 0,
+                createDate: 0,
+                updateDate: 0,
+              } as import("@/types/question").PlainQuestionType;
+            })
             .filter((q) => q !== null) as PlainQuestionType[];
 
           if (validPlainQuestions.length > 0) {
@@ -2259,9 +2169,7 @@ export default function PracticeRushMultistep({
               );
               return (
                 userAnswer &&
-                question?.correct_answer
-                  ?.map((a) => a.trim())
-                  .includes(userAnswer)
+                checkAnswerValidity(userAnswer, question?.correct_answer)
               );
             }).length;
 
@@ -2368,9 +2276,15 @@ export default function PracticeRushMultistep({
         // Create a hash of the practice selections to check cache compatibility
         const selectionsHash = JSON.stringify({
           assessment: selections.assessment,
-          domains: selections.domains?.map((d) => d.primaryClassCd).sort(),
-          difficulties: selections.difficulties?.sort(),
-          skills: selections.skills?.map((s) => s.skill_cd).sort(),
+          domains: selections.domains
+            ?.map((d) => d.primaryClassCd)
+            .slice()
+            .sort(),
+          difficulties: selections.difficulties?.slice().sort(),
+          skills: selections.skills
+            ?.map((s) => s.skill_cd)
+            .slice()
+            .sort(),
           // Don't include questionIds in hash as those are for shared links
         });
 
@@ -2436,9 +2350,37 @@ export default function PracticeRushMultistep({
 
           dispatch({ type: "SET_CURRENT_STEP", payload: 3 });
 
-          // Extract plain questions from restored session data
+          // Extract plain questions from restored session data.
+          // DB rows written after the schema change no longer carry plainQuestion
+          // in answeredQuestionDetails. Build a minimal PlainQuestionType from
+          // the always-present questionId / externalId / ibn so fetchQuestionDetails
+          // can call the question bank API without needing the full metadata.
           const validPlainQuestions = questionDetails
-            .map((item) => item.plainQuestion)
+            .map((item) => {
+              // Prefer legacy plainQuestion if the old row still has it
+              if (item.plainQuestion) return item.plainQuestion;
+              // New rows: reconstruct the minimum needed for the API fetch
+              const id = item.externalId ?? item.ibn ?? "";
+              if (!id) return null;
+              return {
+                questionId: item.questionId,
+                external_id: item.externalId ?? null,
+                ibn: item.ibn ?? null,
+                // Safe defaults for fields only used after the question bank fetch
+                primary_class_cd: "" as import("@/types/lookup").DomainItems,
+                primary_class_cd_desc: "",
+                skill_cd: "" as import("@/types/lookup").SkillCd_Variants,
+                skill_desc: "",
+                difficulty:
+                  "M" as import("@/types/question").QuestionDifficulty,
+                program: "",
+                pPcc: "",
+                uId: "",
+                score_band_range_cd: 0,
+                createDate: 0,
+                updateDate: 0,
+              } as import("@/types/question").PlainQuestionType;
+            })
             .filter((q) => q !== null) as PlainQuestionType[];
 
           if (validPlainQuestions.length > 0) {
@@ -2550,9 +2492,7 @@ export default function PracticeRushMultistep({
                 );
                 return (
                   userAnswer &&
-                  question?.correct_answer
-                    ?.map((a) => a.trim())
-                    .includes(userAnswer)
+                  checkAnswerValidity(userAnswer, question?.correct_answer)
                 );
               },
             ).length;
@@ -2684,10 +2624,14 @@ export default function PracticeRushMultistep({
         assessment: practiceSelections.assessment,
         domains: practiceSelections.domains
           ?.map((d) => d.primaryClassCd)
+          .slice()
           .sort(),
-        difficulties: practiceSelections.difficulties?.sort(),
-        skills: practiceSelections.skills?.map((s) => s.skill_cd).sort(),
-        questionIds: practiceSelections.questionIds?.sort(),
+        difficulties: practiceSelections.difficulties?.slice().sort(),
+        skills: practiceSelections.skills
+          ?.map((s) => s.skill_cd)
+          .slice()
+          .sort(),
+        questionIds: practiceSelections.questionIds?.slice().sort(),
         // Include review mode and session ID in hash to prevent fetching for same session
         effectiveReviewMode: effectiveReviewMode,
         sessionId: restoredSessionData?.sessionId,
@@ -2948,10 +2892,12 @@ export default function PracticeRushMultistep({
 
         if (!state.isAnswerChecked) {
           // First time answering this question
-          const correctAnswers = currentQuestion.correct_answer.map((e) =>
-            e.trim(),
+          const correctAnswers = currentQuestion.correct_answer;
+
+          const correct = checkAnswerValidity(
+            state.selectedAnswer,
+            correctAnswers,
           );
-          const correct = correctAnswers.includes(state.selectedAnswer.trim());
 
           // Play sound based on answer correctness
           if (correct) {
@@ -3273,7 +3219,7 @@ export default function PracticeRushMultistep({
           ? question.correct_answer
           : [question.correct_answer];
 
-        if (correctAnswers.map((e) => e.trim()).includes(userAnswer)) {
+        if (checkAnswerValidity(userAnswer, correctAnswers)) {
           correctAnswersCount++;
         }
       }
@@ -3440,9 +3386,10 @@ export default function PracticeRushMultistep({
                               const isAnswered = Boolean(userAnswer);
                               const isCorrect =
                                 isAnswered &&
-                                question.correct_answer
-                                  .map((a) => a.trim())
-                                  .includes(userAnswer?.trim() || "");
+                                checkAnswerValidity(
+                                  userAnswer,
+                                  question.correct_answer,
+                                );
                               const timeSpent =
                                 state.questionTimes[questionId] || 0;
                               const isCurrent =
@@ -4419,31 +4366,6 @@ export default function PracticeRushMultistep({
             return "";
           }
         })()}
-      />
-
-      {/* Success Feedback - only show for newly answered questions, not when reviewing */}
-      <SuccessFeedback
-        isVisible={
-          state.isAnswerChecked &&
-          state.isAnswerCorrect &&
-          state.isTimerActive === false // Timer is stopped only when answering, not when reviewing
-        }
-        onContinue={() => {
-          if (
-            state.questions &&
-            state.currentQuestionStep < state.questions.length - 1
-          ) {
-            dispatch({
-              type: "SET_CURRENT_QUESTION_STEP",
-              payload: state.currentQuestionStep + 1,
-            });
-          } else {
-            // At end of loaded questions - don't automatically continue
-            console.log(
-              "Reached end of loaded questions in success feedback. User can choose to continue or finish.",
-            );
-          }
-        }}
       />
 
       {/* Exit Confirmation */}

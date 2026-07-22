@@ -12,7 +12,18 @@ import type {
   UserProfileWithHistory,
   XPTransaction,
 } from "@/types/userProfile";
-import type { PracticeStatistics, PracticeSession } from "@/types";
+import type {
+  PracticeStatistics,
+  PracticeSession,
+  AnsweredQuestion,
+  ClassStatistics,
+} from "@/types";
+import {
+  stripAnsweredQuestionsDetailed,
+  stripClassStatistics,
+  normaliseAnsweredQuestion,
+  normaliseClassStatistics,
+} from "@/lib/db/statsTransforms";
 
 // ─── User Record ─────────────────────────────────────────────────────────────
 
@@ -107,13 +118,47 @@ export async function getUserProfile(
 }
 
 /**
- * Insert or update the profile for a user (upsert).
+ * Insert or update the profile for a user (read-then-merge upsert).
+ *
+ * Fetches the existing row first so we never overwrite columns the caller
+ * didn't touch. The incoming `data` is merged on top of the persisted row —
+ * scalar fields are replaced only when the caller provides them; xpHistory
+ * entries are unioned by timestamp so no XP transaction is ever lost.
+ *
  * Validates: Requirement 8.1
  */
 export async function updateUserProfile(
   userId: string,
   data: Partial<UserProfileWithHistory>,
 ): Promise<UserProfileWithHistory> {
+  // Read the current persisted row (may be null for brand-new users)
+  const existing = await getUserProfile(userId);
+
+  // Merge: use the incoming value when provided, otherwise fall back to the
+  // persisted value, then to a safe default. This prevents partially-populated
+  // callers from zeroing out fields they don't know about.
+  const merged: UserProfileWithHistory = {
+    totalXP: data.totalXP ?? existing?.totalXP ?? 0,
+    level: data.level ?? existing?.level ?? 0,
+    questionsAnswered:
+      data.questionsAnswered ?? existing?.questionsAnswered ?? 0,
+    correctAnswers: data.correctAnswers ?? existing?.correctAnswers ?? 0,
+    incorrectAnswers: data.incorrectAnswers ?? existing?.incorrectAnswers ?? 0,
+    lastActivity: data.lastActivity ?? existing?.lastActivity ?? "",
+    createdAt: existing?.createdAt ?? new Date().toISOString(),
+    // Union xpHistory by timestamp so no transaction is ever lost
+    xpHistory: (() => {
+      const base: XPTransaction[] = existing?.xpHistory ?? [];
+      const incoming: XPTransaction[] = data.xpHistory ?? [];
+      if (incoming.length === 0) return base;
+      const existingTimestamps = new Set(base.map((t) => t.timestamp));
+      const newEntries = incoming.filter(
+        (t) => !existingTimestamps.has(t.timestamp),
+      );
+      return [...base, ...newEntries];
+    })(),
+  };
+
   const result = await pool.query<DbUserProfile>(
     `INSERT INTO user_profiles
        (user_id, total_xp, level, questions_answered, correct_answers,
@@ -141,13 +186,13 @@ export async function updateUserProfile(
        updated_at         AS "updatedAt"`,
     [
       userId,
-      data.totalXP ?? 0,
-      data.level ?? 0,
-      data.questionsAnswered ?? 0,
-      data.correctAnswers ?? 0,
-      data.incorrectAnswers ?? 0,
-      data.lastActivity ?? null,
-      JSON.stringify(data.xpHistory ?? []),
+      merged.totalXP,
+      merged.level,
+      merged.questionsAnswered,
+      merged.correctAnswers,
+      merged.incorrectAnswers,
+      merged.lastActivity || null,
+      JSON.stringify(merged.xpHistory),
     ],
   );
 
@@ -160,9 +205,40 @@ interface DbPracticeStatistics {
   userId: string;
   assessment: string;
   answeredQuestions: string[];
-  answeredQuestionsDetailed: unknown[];
+  // Raw JSONB from Postgres — may be old format (with plainQuestion) or new
+  // format (with top-level primary_class_cd / skill_cd). Normalised on read.
+  answeredQuestionsDetailed: Record<string, unknown>[];
   statistics: Record<string, unknown>;
   updatedAt: Date;
+}
+
+/**
+ * Normalise a raw DB row into the PracticeStatistics shape.
+ *
+ * Handles both legacy rows (plainQuestion present in JSONB) and new rows
+ * (plainQuestion stripped, primary_class_cd / skill_cd promoted). The
+ * normalised shape has primary_class_cd and skill_cd at the top level of
+ * each AnsweredQuestion entry so that review/page.tsx can read them directly
+ * without touching plainQuestion.
+ */
+function rowToAssessmentStats(row: DbPracticeStatistics): {
+  answeredQuestions: string[];
+  answeredQuestionsDetailed: AnsweredQuestion[];
+  statistics: ClassStatistics;
+} {
+  const answeredQuestionsDetailed = (row.answeredQuestionsDetailed ?? []).map(
+    (raw) => normaliseAnsweredQuestion(raw) as unknown as AnsweredQuestion,
+  );
+
+  const statistics = normaliseClassStatistics(
+    row.statistics ?? {},
+  ) as unknown as ClassStatistics;
+
+  return {
+    answeredQuestions: row.answeredQuestions ?? [],
+    answeredQuestionsDetailed,
+    statistics,
+  };
 }
 
 /**
@@ -191,16 +267,25 @@ export async function getPracticeStatistics(
 
   const row = result.rows[0];
   return {
-    [assessment]: {
-      answeredQuestions: row.answeredQuestions ?? [],
-      answeredQuestionsDetailed: row.answeredQuestionsDetailed ?? [],
-      statistics: row.statistics ?? {},
-    },
+    [assessment]: rowToAssessmentStats(row),
   } as unknown as PracticeStatistics;
 }
 
 /**
- * Insert or update practice statistics for a user and assessment.
+ * Insert or update practice statistics for a user and assessment
+ * (read-then-merge upsert).
+ *
+ * Fetches the existing row first and merges the incoming data so that no
+ * previously-answered question is ever lost:
+ *   - answeredQuestions  : union of existing + incoming (deduplicated)
+ *   - answeredQuestionsDetailed : union by questionId (incoming wins on dupe)
+ *   - statistics         : deep-merge by domain → skill → questionId
+ *                          (incoming wins at the leaf level)
+ *
+ * Strips plainQuestion from both JSONB columns before writing. Promotes
+ * primary_class_cd and skill_cd as explicit top-level fields on each
+ * answered_questions_detailed entry.
+ *
  * Validates: Requirement 8.2
  */
 export async function updatePracticeStatistics(
@@ -211,15 +296,57 @@ export async function updatePracticeStatistics(
   const assessmentData = (data as Record<string, unknown>)[assessment] as
     | {
         answeredQuestions?: string[];
-        answeredQuestionsDetailed?: unknown[];
-        statistics?: Record<string, unknown>;
+        answeredQuestionsDetailed?: AnsweredQuestion[];
+        statistics?: ClassStatistics;
       }
     | undefined;
 
-  const answeredQuestions = assessmentData?.answeredQuestions ?? [];
-  const answeredQuestionsDetailed =
-    assessmentData?.answeredQuestionsDetailed ?? [];
-  const statistics = assessmentData?.statistics ?? {};
+  // ── Fetch existing row so we can merge rather than replace ─────────────────
+  const existingStats = await getPracticeStatistics(userId, assessment);
+  const existingAssessment = existingStats?.[assessment];
+
+  // ── Merge answeredQuestions (string array, deduplicated) ──────────────────
+  const incomingAnsweredQs = assessmentData?.answeredQuestions ?? [];
+  const existingAnsweredQs = existingAssessment?.answeredQuestions ?? [];
+  const mergedAnsweredQuestions = [
+    ...new Set([...existingAnsweredQs, ...incomingAnsweredQs]),
+  ];
+
+  // ── Merge answeredQuestionsDetailed (by questionId, incoming wins) ─────────
+  const incomingDetailed =
+    assessmentData?.answeredQuestionsDetailed ?? ([] as AnsweredQuestion[]);
+  const existingDetailed =
+    existingAssessment?.answeredQuestionsDetailed ?? ([] as AnsweredQuestion[]);
+  const detailedMap = new Map<string, AnsweredQuestion>();
+  // Load existing first, then overwrite with incoming so newer data wins
+  for (const entry of existingDetailed) {
+    detailedMap.set(entry.questionId, entry);
+  }
+  for (const entry of incomingDetailed) {
+    detailedMap.set(entry.questionId, entry);
+  }
+  const mergedDetailed = Array.from(detailedMap.values());
+
+  // ── Merge statistics (deep merge: domain → skill → questionId) ────────────
+  const incomingStats = (assessmentData?.statistics ?? {}) as ClassStatistics;
+  const existingStatsCls = (existingAssessment?.statistics ??
+    {}) as ClassStatistics;
+  const mergedStats: ClassStatistics = { ...existingStatsCls };
+  for (const domain of Object.keys(incomingStats)) {
+    mergedStats[domain] = { ...(mergedStats[domain] ?? {}) };
+    for (const skill of Object.keys(incomingStats[domain])) {
+      mergedStats[domain][skill] = {
+        ...(mergedStats[domain][skill] ?? {}),
+        ...incomingStats[domain][skill],
+      };
+    }
+  }
+
+  // ── Strip plainQuestion before writing ────────────────────────────────────
+  const strippedDetailed = stripAnsweredQuestionsDetailed(
+    mergedDetailed as AnsweredQuestion[],
+  );
+  const strippedStats = stripClassStatistics(mergedStats as ClassStatistics);
 
   const result = await pool.query<DbPracticeStatistics>(
     `INSERT INTO practice_statistics
@@ -240,41 +367,64 @@ export async function updatePracticeStatistics(
     [
       userId,
       assessment,
-      JSON.stringify(answeredQuestions),
-      JSON.stringify(answeredQuestionsDetailed),
-      JSON.stringify(statistics),
+      JSON.stringify(mergedAnsweredQuestions),
+      JSON.stringify(strippedDetailed),
+      JSON.stringify(strippedStats),
     ],
   );
 
   const row = result.rows[0];
   return {
-    [assessment]: {
-      answeredQuestions: row.answeredQuestions ?? [],
-      answeredQuestionsDetailed: row.answeredQuestionsDetailed ?? [],
-      statistics: row.statistics ?? {},
-    },
+    [assessment]: rowToAssessmentStats(row),
   } as unknown as PracticeStatistics;
 }
 
 // ─── Practice Sessions ────────────────────────────────────────────────────────
 
+import {
+  stripSessionForDb,
+  normaliseAnsweredQuestionDetail,
+} from "@/lib/db/sessionTransforms";
+
 interface DbPracticeSession {
   id: string;
   userId: string;
   sessionId: string;
-  sessionData: PracticeSession;
+  sessionData: Record<string, unknown>;
   status: string;
   currentSession: boolean;
   createdAt: Date;
   updatedAt: Date;
 }
 
+/**
+ * Converts a raw DB row into a PracticeSession.
+ *
+ * Handles both old rows (session_data contains plainQuestion in
+ * answeredQuestionDetails, plus correctAnswers / accuracyPercentage) and new
+ * rows (stripped). The dedicated columns sessionId and currentSession always
+ * override whatever is in the JSONB blob.
+ *
+ * answeredQuestionDetails entries are normalised so they always have
+ * { questionId, externalId, ibn } without plainQuestion, regardless of row age.
+ */
 function rowToPracticeSession(row: DbPracticeSession): PracticeSession {
+  const blob = row.sessionData as unknown as PracticeSession & {
+    answeredQuestionDetails?: Record<string, unknown>[];
+  };
+
+  // Normalise answeredQuestionDetails: strip plainQuestion from legacy rows
+  const answeredQuestionDetails = (blob.answeredQuestionDetails ?? []).map(
+    (d) =>
+      normaliseAnsweredQuestionDetail(d as unknown as Record<string, unknown>),
+  );
+
   return {
-    ...(row.sessionData as PracticeSession),
+    ...blob,
     sessionId: row.sessionId,
     currentSession: row.currentSession,
-  };
+    answeredQuestionDetails,
+  } as unknown as PracticeSession;
 }
 
 /**
@@ -344,11 +494,20 @@ export async function createPracticeSession(
     );
   }
 
+  // Strip plainQuestion from answeredQuestionDetails and remove
+  // questionCorrectChoices / correctAnswers / accuracyPercentage before writing.
+  const stripped = stripSessionForDb(
+    sessionData as PracticeSession & {
+      correctAnswers?: number;
+      accuracyPercentage?: number;
+    },
+  );
+
   const result = await pool.query<DbPracticeSession>(
     `INSERT INTO practice_sessions
        (user_id, session_id, session_data, status, current_session)
      VALUES ($1, $2, $3, $4, $5)
-     ON CONFLICT (session_id) DO UPDATE SET
+     ON CONFLICT (user_id, session_id) DO UPDATE SET
        session_data     = EXCLUDED.session_data,
        status           = EXCLUDED.status,
        current_session  = EXCLUDED.current_session,
@@ -361,7 +520,7 @@ export async function createPracticeSession(
     [
       userId,
       sessionData.sessionId,
-      JSON.stringify(sessionData),
+      JSON.stringify(stripped),
       sessionData.status ?? "not_started",
       isCurrentSession,
     ],
@@ -371,7 +530,7 @@ export async function createPracticeSession(
 }
 
 /**
- * Update an existing practice session by session ID.
+ * Update an existing practice session by session ID, scoped to the owning user.
  * When currentSession is set to true, clears the flag on any other session
  * for this user first.
  * Validates: Requirement 8.4
@@ -379,20 +538,33 @@ export async function createPracticeSession(
 export async function updatePracticeSession(
   sessionId: string,
   data: Partial<PracticeSession>,
+  userId?: string,
 ): Promise<PracticeSession | null> {
-  // Merge with existing session data
+  // Fetch existing session, optionally scoped to the owning user
   const existing = await pool.query<DbPracticeSession>(
     `SELECT session_data AS "sessionData", status, user_id AS "userId",
             current_session AS "currentSession"
      FROM practice_sessions
      WHERE session_id = $1
+       AND ($2::uuid IS NULL OR user_id = $2)
      LIMIT 1`,
-    [sessionId],
+    [sessionId, userId ?? null],
   );
 
   if (!existing.rows[0]) return null;
 
-  const merged = { ...existing.rows[0].sessionData, ...data };
+  // Merge incoming partial data over the existing DB blob, then strip
+  // plainQuestion / questionCorrectChoices / correctAnswers / accuracyPercentage
+  // before writing back so every update gradually migrates old rows.
+  const rawMerged = {
+    ...existing.rows[0].sessionData,
+    ...data,
+  } as PracticeSession & {
+    correctAnswers?: number;
+    accuracyPercentage?: number;
+  };
+  const merged = stripSessionForDb(rawMerged);
+
   const newStatus = data.status ?? existing.rows[0].status;
   const newCurrentSession =
     data.currentSession !== undefined
@@ -417,12 +589,19 @@ export async function updatePracticeSession(
          current_session = $4,
          updated_at      = CURRENT_TIMESTAMP
      WHERE session_id = $1
+       AND ($5::uuid IS NULL OR user_id = $5)
      RETURNING
        id, user_id AS "userId", session_id AS "sessionId",
        session_data AS "sessionData", status,
        current_session AS "currentSession",
        created_at AS "createdAt", updated_at AS "updatedAt"`,
-    [sessionId, JSON.stringify(merged), newStatus, newCurrentSession],
+    [
+      sessionId,
+      JSON.stringify(merged),
+      newStatus,
+      newCurrentSession,
+      userId ?? null,
+    ],
   );
 
   if (!result.rows[0]) return null;

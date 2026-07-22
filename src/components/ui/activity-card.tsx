@@ -25,6 +25,7 @@ import {
   CardToolbar,
 } from "./card-v2";
 import { Button } from "./button";
+import { Skeleton } from "./skeleton";
 
 // Creative and flexible unit system for metrics
 export type TimeUnit =
@@ -102,6 +103,7 @@ interface ActivityCardProps {
   externalStreakDays?: number; // Allow external streak calculation to be passed in
   onViewDetails?: () => void;
   className?: string;
+  isLoadingMetrics?: boolean; // Show skeleton rings while server data is fetching
 }
 
 // Helper function to get dynamic metric styling based on unit type
@@ -301,6 +303,7 @@ export function ActivityCard({
   externalStreakDays,
   onViewDetails,
   className,
+  isLoadingMetrics = false,
 }: ActivityCardProps) {
   const resolvedProfile = useResolvedUserProfile();
   const [isHovering, setIsHovering] = useState<string | null>(null);
@@ -334,15 +337,15 @@ export function ActivityCard({
 
       // Calculate metrics based on user data
       const calculatedMetrics: Metric[] = [
-        {
-          label: "Total XP",
-          value: profile.totalXP.toString(),
-          trend: Math.min(100, (profile.totalXP / 1000) * 100),
-          unit: "XP",
-          color: "#FF2D55",
-          prefix: "",
-          suffix: " earned",
-        },
+        // {
+        //   label: "Total XP",
+        //   value: profile.totalXP.toString(),
+        //   trend: Math.min(100, (profile.totalXP / 1000) * 100),
+        //   unit: "XP",
+        //   color: "#FF2D55",
+        //   prefix: "",
+        //   suffix: " earned",
+        // },
         {
           label: "Questions",
           value: profile.questionsAnswered.toString(),
@@ -350,7 +353,7 @@ export function ActivityCard({
             profile.questionsAnswered > 0
               ? Math.min(
                   100,
-                  (profile.correctAnswers / profile.questionsAnswered) * 100
+                  (profile.correctAnswers / profile.questionsAnswered) * 100,
                 )
               : 0,
           unit: "questions",
@@ -405,7 +408,7 @@ export function ActivityCard({
   const handleGoalToggle = (goalId: string) => {
     setGoals((prev) => {
       const updatedGoals = prev.map((goal) =>
-        goal.id === goalId ? { ...goal, isCompleted: !goal.isCompleted } : goal
+        goal.id === goalId ? { ...goal, isCompleted: !goal.isCompleted } : goal,
       );
       // Save to localStorage whenever goals are updated
       saveGoalsToStorage(updatedGoals);
@@ -450,7 +453,9 @@ export function ActivityCard({
     if (editingGoalText.trim()) {
       setGoals((prev) => {
         const updatedGoals = prev.map((goal) =>
-          goal.id === goalId ? { ...goal, title: editingGoalText.trim() } : goal
+          goal.id === goalId
+            ? { ...goal, title: editingGoalText.trim() }
+            : goal,
         );
         saveGoalsToStorage(updatedGoals);
         return updatedGoals;
@@ -471,7 +476,7 @@ export function ActivityCard({
       className={cn(
         "rounded-3xl sticky top-16",
         "transition-all duration-300",
-        className
+        className,
       )}
     >
       <CardHeader>
@@ -528,102 +533,111 @@ export function ActivityCard({
 
         {/* Metrics Rings */}
         <div className="grid grid-cols-3 gap-4">
-          {metrics.map((metric) => {
-            const styling = getMetricStyling(metric.unit);
-            return (
-              <div
-                key={metric.label}
-                className="relative flex flex-col items-center"
-                onMouseEnter={() => setIsHovering(metric.label)}
-                onMouseLeave={() => setIsHovering(null)}
-              >
-                <div className="relative w-24 h-24">
-                  <div className="absolute inset-0 rounded-full border-4 border-zinc-200 dark:border-zinc-800/50" />
-                  <div
-                    className={cn(
-                      "absolute inset-0 rounded-full border-4 transition-all duration-500",
-                      isHovering === metric.label && "scale-105 shadow-lg"
-                    )}
-                  />
-                  <div className="absolute inset-0 flex flex-col items-center justify-center">
-                    {/* Icon display */}
-                    {metric.icon && (
-                      <span
-                        className="text-lg mb-1"
-                        role="img"
-                        aria-label={metric.label}
-                      >
-                        {metric.icon}
-                      </span>
-                    )}
-                    <div className="flex items-center justify-center">
-                      {/* Prefix */}
-                      {metric.prefix && (
-                        <span
-                          className={cn(
-                            "text-sm font-medium",
-                            styling.textColor,
-                            "dark:text-zinc-400"
-                          )}
-                        >
-                          {metric.prefix}
-                        </span>
-                      )}
-                      {/* Main value */}
-                      <span
-                        className={cn(
-                          "font-bold",
-                          metric.color
-                            ? "text-zinc-900 dark:text-white"
-                            : styling.textColor,
-                          "dark:text-white",
-                          metric.icon ? "text-lg" : "text-xl"
-                        )}
-                      >
-                        {metric.value}
-                      </span>
-                      {/* Unit */}
-                      {metric.unit && (
-                        <span
-                          className={cn(
-                            "text-xs ml-1",
-                            styling.textColor,
-                            "dark:text-zinc-400"
-                          )}
-                        >
-                          {metric.unit}
-                        </span>
-                      )}
-                    </div>
-                    {/* Suffix */}
-                    {metric.suffix && (
-                      <span className="text-xs text-zinc-500 dark:text-zinc-400 text-center mt-1 max-w-20 leading-tight">
-                        {metric.suffix}
-                      </span>
-                    )}
-                  </div>
+          {isLoadingMetrics
+            ? // Skeleton rings while server data is in-flight
+              Array.from({ length: 2 }).map((_, i) => (
+                <div key={i} className="relative flex flex-col items-center">
+                  <Skeleton className="w-24 h-24 rounded-full" />
+                  <Skeleton className="mt-3 h-3 w-16 rounded" />
+                  <Skeleton className="mt-1 h-2 w-12 rounded" />
                 </div>
-                <span
-                  className={cn(
-                    "mt-3 text-sm font-medium",
-                    styling.textColor,
-                    "dark:text-zinc-300"
-                  )}
-                >
-                  {metric.label}
-                </span>
-                <span
-                  className={cn(
-                    "text-xs",
-                    styling.textColor,
-                    "dark:text-zinc-500"
-                  )}
-                >
-                  {metric.trend}% progress
-                </span>
-              </div>
-            );
-          })}
+              ))
+            : metrics.map((metric) => {
+                const styling = getMetricStyling(metric.unit);
+                return (
+                  <div
+                    key={metric.label}
+                    className="relative flex flex-col items-center"
+                    onMouseEnter={() => setIsHovering(metric.label)}
+                    onMouseLeave={() => setIsHovering(null)}
+                  >
+                    <div className="relative w-24 h-24">
+                      <div className="absolute inset-0 rounded-full border-4 border-zinc-200 dark:border-zinc-800/50" />
+                      <div
+                        className={cn(
+                          "absolute inset-0 rounded-full border-4 transition-all duration-500",
+                          isHovering === metric.label && "scale-105 shadow-lg",
+                        )}
+                      />
+                      <div className="absolute inset-0 flex flex-col items-center justify-center">
+                        {/* Icon display */}
+                        {metric.icon && (
+                          <span
+                            className="text-lg mb-1"
+                            role="img"
+                            aria-label={metric.label}
+                          >
+                            {metric.icon}
+                          </span>
+                        )}
+                        <div className="flex items-center justify-center">
+                          {/* Prefix */}
+                          {metric.prefix && (
+                            <span
+                              className={cn(
+                                "text-sm font-medium",
+                                styling.textColor,
+                                "dark:text-zinc-400",
+                              )}
+                            >
+                              {metric.prefix}
+                            </span>
+                          )}
+                          {/* Main value */}
+                          <span
+                            className={cn(
+                              "font-bold",
+                              metric.color
+                                ? "text-zinc-900 dark:text-white"
+                                : styling.textColor,
+                              "dark:text-white",
+                              metric.icon ? "text-lg" : "text-xl",
+                            )}
+                          >
+                            {metric.value}
+                          </span>
+                          {/* Unit */}
+                          {metric.unit && (
+                            <span
+                              className={cn(
+                                "text-xs ml-1",
+                                styling.textColor,
+                                "dark:text-zinc-400",
+                              )}
+                            >
+                              {metric.unit}
+                            </span>
+                          )}
+                        </div>
+                        {/* Suffix */}
+                        {metric.suffix && (
+                          <span className="text-xs text-zinc-500 dark:text-zinc-400 text-center mt-1 max-w-20 leading-tight">
+                            {metric.suffix}
+                          </span>
+                        )}
+                      </div>
+                    </div>
+                    <span
+                      className={cn(
+                        "mt-3 text-sm font-medium",
+                        styling.textColor,
+                        "dark:text-zinc-300",
+                      )}
+                    >
+                      {metric.label}
+                    </span>
+                    <span
+                      className={cn(
+                        "text-xs",
+                        styling.textColor,
+                        "dark:text-zinc-500",
+                      )}
+                    >
+                      {metric.trend}% progress
+                    </span>
+                  </div>
+                );
+              })}
         </div>
 
         {/* Goals Section */}
@@ -654,7 +668,7 @@ export function ActivityCard({
                     "bg-zinc-50 dark:bg-zinc-900/50",
                     "border border-zinc-200/50 dark:border-zinc-800/50",
                     "hover:border-zinc-300/50 dark:hover:border-zinc-700/50",
-                    "transition-all group"
+                    "transition-all group",
                   )}
                 >
                   {editingGoalId === goal.id ? (
@@ -665,7 +679,7 @@ export function ActivityCard({
                           "w-5 h-5 flex-shrink-0",
                           goal.isCompleted
                             ? "text-emerald-500"
-                            : "text-zinc-400 dark:text-zinc-600"
+                            : "text-zinc-400 dark:text-zinc-600",
                         )}
                       />
                       <input
@@ -709,7 +723,7 @@ export function ActivityCard({
                             "w-5 h-5",
                             goal.isCompleted
                               ? "text-emerald-500"
-                              : "text-zinc-400 dark:text-zinc-600"
+                              : "text-zinc-400 dark:text-zinc-600",
                           )}
                         />
                         <span
@@ -717,7 +731,7 @@ export function ActivityCard({
                             "text-sm text-left",
                             goal.isCompleted
                               ? "text-zinc-500 dark:text-zinc-400 line-through"
-                              : "text-zinc-700 dark:text-zinc-300"
+                              : "text-zinc-700 dark:text-zinc-300",
                           )}
                         >
                           {goal.title}
@@ -729,7 +743,7 @@ export function ActivityCard({
                         onClick={() => handleStartEdit(goal)}
                         className={cn(
                           "p-1 rounded-full hover:bg-blue-100 dark:hover:bg-blue-900/20 transition-colors",
-                          "opacity-0 group-hover:opacity-100"
+                          "opacity-0 group-hover:opacity-100",
                         )}
                         title="Edit goal"
                       >
@@ -743,7 +757,7 @@ export function ActivityCard({
                           "p-1 rounded-full hover:bg-red-100 dark:hover:bg-red-900/20 transition-colors",
                           "opacity-0 group-hover:opacity-100",
                           // Always show for custom goals (goals with timestamp IDs)
-                          goal.id.startsWith("goal-") && "opacity-100"
+                          goal.id.startsWith("goal-") && "opacity-100",
                         )}
                         title="Remove goal"
                       >

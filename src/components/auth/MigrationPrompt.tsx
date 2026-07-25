@@ -93,14 +93,11 @@ export function MigrationPrompt({
   return (
     /* Backdrop */
     <div
-      className="fixed inset-0  flex items-center justify-center p-4"
+      className="fixed inset-0 z-[200] flex items-center justify-center p-4"
       aria-modal="true"
       role="dialog"
       aria-labelledby={titleId}
       onKeyDown={handleKeyDown}
-      style={{
-        zIndex: 100,
-      }}
     >
       {/* Scrim — not dismissible while loading */}
       <div
@@ -387,6 +384,18 @@ function MigrationSummaryDisplay({ summary }: { summary: MigrationSummary }) {
     {
       label: "Preferences",
       value: summary.preferencesMigrated ? "Imported" : "Skipped",
+    },
+    {
+      label: "Question notes",
+      value: summary.notesMigrated ? "Imported" : "Skipped",
+    },
+    {
+      label: "Answer history",
+      value: summary.answerHistoryMigrated ? "Imported" : "Skipped",
+    },
+    {
+      label: "Vocab performance",
+      value: summary.practicePerformanceMigrated ? "Imported" : "Skipped",
     },
   ];
 

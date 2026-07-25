@@ -20,60 +20,12 @@ import {
   ChartTooltip,
   ChartTooltipContent,
 } from "@/components/ui/bar-chart";
-import { Bar, BarChart, Rectangle, XAxis, YAxis } from "recharts";
+import { Bar, BarChart, LabelList, XAxis, YAxis } from "recharts";
 import {
   primaryClassCdObjectData,
   skillCdsObjectData,
 } from "@/static-data/domains";
 import { cn } from "@/lib/utils";
-
-const chartData = [
-  {
-    country: "United States",
-    count: 45000,
-    percentage: 45.0,
-  },
-  {
-    country: "Canada",
-    count: 34000,
-    percentage: 18.0,
-  },
-  {
-    country: "United Kingdom",
-    count: 30000,
-    percentage: 12.0,
-  },
-  {
-    country: "Germany",
-    count: 25000,
-    percentage: 9.0,
-  },
-  {
-    country: "Australia",
-    count: 22000,
-    percentage: 7.5,
-  },
-  {
-    country: "France",
-    count: 18000,
-    percentage: 6.0,
-  },
-  {
-    country: "Japan",
-    count: 15000,
-    percentage: 4.5,
-  },
-  {
-    country: "Brazil",
-    count: 13000,
-    percentage: 5.0,
-  },
-  {
-    country: "Indonesia",
-    count: 10030,
-    percentage: 6.0,
-  },
-];
 
 const chartConfig = {
   correctAnswers: {
@@ -153,9 +105,9 @@ export default function PracticeRushCelebration({
       if (accuracyPercentage >= 80) return "Excellent work!";
       if (accuracyPercentage >= 70) return "Great job!";
       if (accuracyPercentage >= 60) return "Good effort!";
-      return "Keep practicing! 📚";
+      return "Keep practicing!";
     } else {
-      return "Progress saved! 💾";
+      return "Progress saved!";
     }
   };
 
@@ -438,13 +390,45 @@ export default function PracticeRushCelebration({
                       >
                         <BarChart
                           accessibilityLayer
-                          data={answeredQuestionsDataSummary[domainKey].summary}
+                          data={answeredQuestionsDataSummary[
+                            domainKey
+                          ].summary.map((s: any) => ({
+                            ...s,
+                            // Normalise both values to percentage so XAxis domain is always 0-100
+                            correctPct:
+                              s.correctAnswers + s.incorrectAnswers > 0
+                                ? Math.round(
+                                    (s.correctAnswers /
+                                      (s.correctAnswers + s.incorrectAnswers)) *
+                                      100,
+                                  )
+                                : 0,
+                            incorrectPct:
+                              s.correctAnswers + s.incorrectAnswers > 0
+                                ? 100 -
+                                  Math.round(
+                                    (s.correctAnswers /
+                                      (s.correctAnswers + s.incorrectAnswers)) *
+                                      100,
+                                  )
+                                : 100,
+                            skillLabel:
+                              skillCdsObjectData[s.text]?.text ?? s.text,
+                            pctLabel: `${(s.correctAnswers +
+                              s.incorrectAnswers >
+                            0
+                              ? Math.round(
+                                  (s.correctAnswers /
+                                    (s.correctAnswers + s.incorrectAnswers)) *
+                                    100,
+                                )
+                              : 0
+                            ).toString()} %`,
+                          }))}
                           layout="vertical"
-                          margin={{
-                            left: 0,
-                          }}
+                          margin={{ left: 0, right: 48, top: 0, bottom: 0 }}
                         >
-                          <XAxis type="number" dataKey="correctAnswers" hide />
+                          <XAxis type="number" domain={[0, 100]} hide />
                           <YAxis dataKey="text" type="category" hide />
                           <ChartTooltip
                             cursor={false}
@@ -457,60 +441,46 @@ export default function PracticeRushCelebration({
                               />
                             }
                           />
+                          {/* Correct answers bar */}
                           <Bar
-                            dataKey="summary"
-                            background={{
-                              radius: 10,
-                              fill: "var(--color-blue-300)",
-                              opacity: 0.2,
-                            }}
-                            fill="var(--color-blue-400)"
-                            radius={10}
-                            shape={(props: any) => {
-                              console.log("shape", props);
-
-                              return (
-                                <>
-                                  <Rectangle
-                                    {...props}
-                                    width={
-                                      (props.payload.correctAnswers /
-                                        (props.payload.correctAnswers +
-                                          props.payload.incorrectAnswers)) *
-                                      props.background.width
-                                    }
-                                  />
-                                  <text
-                                    x={props.x + 25}
-                                    y={
-                                      props.y + props.background.height / 2 + 3
-                                    }
-                                    fill="var(--color-blue-900)"
-                                    fontSize={12.5}
-                                  >
-                                    {
-                                      skillCdsObjectData[props.payload.text]
-                                        .text
-                                    }
-                                  </text>
-                                  <text
-                                    x={props.background.width - 10}
-                                    y={
-                                      props.y + props.background.height / 2 + 3
-                                    }
-                                    textAnchor="end"
-                                    fill="var(--fg)"
-                                  >
-                                    {(props.payload.correctAnswers /
-                                      (props.payload.correctAnswers +
-                                        props.payload.incorrectAnswers)) *
-                                      100}{" "}
-                                    %
-                                  </text>
-                                </>
-                              );
-                            }}
-                          />
+                            dataKey="correctPct"
+                            stackId="a"
+                            fill="rgb(96 165 250)"
+                            radius={[10, 0, 0, 10]}
+                            maxBarSize={32}
+                            isAnimationActive={false}
+                          >
+                            <LabelList
+                              dataKey="skillLabel"
+                              position="insideLeft"
+                              style={{
+                                fill: "#1e3a5f",
+                                fontSize: 12,
+                                fontWeight: 500,
+                              }}
+                              offset={10}
+                            />
+                          </Bar>
+                          {/* Incorrect answers bar (background remainder) */}
+                          <Bar
+                            dataKey="incorrectPct"
+                            stackId="a"
+                            fill="rgb(219 234 254)"
+                            radius={[0, 10, 10, 0]}
+                            maxBarSize={32}
+                            isAnimationActive={false}
+                          >
+                            <LabelList
+                              dataKey="pctLabel"
+                              position="right"
+                              style={{
+                                fill: "var(--foreground, #111)",
+                                fontSize: 12,
+                                fontWeight: 600,
+                              }}
+                              offset={6}
+                            />
+                          </Bar>
                         </BarChart>
                       </Chart>
                     </div>

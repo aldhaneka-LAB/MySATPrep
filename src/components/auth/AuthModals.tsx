@@ -19,6 +19,7 @@
  */
 
 import { lazy, memo, Suspense, useState } from "react";
+import { createPortal } from "react-dom";
 
 // ─── Lazy-loaded modal components ─────────────────────────────────────────────
 // These are loaded on demand — the JS bundle for these components is only
@@ -41,12 +42,9 @@ const SignUpModal = lazy(() =>
 function ModalLoadingFallback() {
   return (
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center p-4"
+      className="fixed inset-0 z-[200] flex items-center justify-center p-4"
       aria-live="polite"
       aria-label="Loading…"
-      style={{
-        zIndex: 100,
-      }}
     >
       <div
         className="absolute inset-0 bg-black/50 backdrop-blur-sm"
@@ -135,7 +133,9 @@ export const AuthModals = memo(function AuthModals({
   // don't add a Suspense node to every page that includes <AuthModals />.
   if (!activeModal) return null;
 
-  return (
+  // Use a portal so the modal renders at document.body level, escaping any
+  // stacking context created by parent components (e.g. the sidebar).
+  return createPortal(
     <Suspense fallback={<ModalLoadingFallback />}>
       {activeModal === "signin" && (
         <SignInModal
@@ -152,6 +152,7 @@ export const AuthModals = memo(function AuthModals({
           onSwitchToSignIn={switchToSignIn}
         />
       )}
-    </Suspense>
+    </Suspense>,
+    document.body,
   );
 });

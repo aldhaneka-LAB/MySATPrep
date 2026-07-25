@@ -9,7 +9,6 @@ import {
 } from "@/lib/exportImport";
 
 import { Button } from "@/components/ui/button";
-import { DownloadIcon, FolderInputIcon, FolderOutputIcon } from "lucide-react";
 
 export default function SessionsPage() {
   const { state } = useAssessment();
@@ -79,53 +78,66 @@ export default function SessionsPage() {
   };
 
   return (
-    <section className="space-y-4 max-w-4xl lg:max-w-5xl xl:max-w-7xl w-full mx-auto px-3 py-10 ">
-      You can export your data, which is stored on your browser local storage,
-      to a JSON file, which can be imported back into the the platform later —
-      whether you switch browser or testing our new alpha version of the
-      platform (TBA). This is useful for backing up your data or transferring it
-      to another device.
-      <br />
-      <br />
-      I promise the data won't corrupt, but it's always a good idea to keep a
-      backup just in case.
-      <br />
-      The exported data includes your saved questions, practice statistics, and
-      any other relevant information stored in your local storage related to
-      your assessments.
-      <br />
-      <br />
-      In the meantime, please wait while I develop the authentication so you can
-      store your data in the cloud (If you wish to) — many people asking me for
-      this feature ._.
-      <br />
-      But anyway, later, the authentication is just optional. You can still use
-      the platform while your data is stored locally and kept private.
-      <br />
-      <br />
-      Thanks for using MySATPrep! Love yall
-      <br />
-      - Aldhaneka
-      <br />
-      <section className="flex gap-2 pt-5">
-        {" "}
-        <Button
-          variant="outline"
-          size="sm"
-          onClick={handleExport}
-          disabled={isExporting}
-        >
-          <DownloadIcon /> {isExporting ? "Exporting..." : "Export"}
-        </Button>
-        <Button
-          variant="outline"
-          size="sm"
-          onClick={handleImportClick}
-          disabled={isImporting}
-        >
-          <FolderInputIcon /> {isImporting ? "Importing..." : "Import"}
-        </Button>
+    <section className="mx-auto w-full max-w-4xl space-y-6 px-3 py-10 lg:max-w-5xl xl:max-w-7xl">
+      <div>
+        <h1 className="text-2xl font-bold sm:text-3xl">Export &amp; Import</h1>
+        <p className="mt-2 max-w-2xl text-sm leading-6 text-muted-foreground">
+          Back up your local data or restore it from a previous export. You can
+          also import a backup after signing in to sync your progress to the
+          cloud.
+        </p>
+      </div>
+
+      <div className="grid gap-4 md:grid-cols-2">
+        <div className="rounded-2xl border bg-background p-5 shadow-sm">
+          <h2 className="text-lg font-semibold">Export your data</h2>
+          <p className="mt-2 text-sm text-muted-foreground">
+            Download your local storage data as a JSON file. It includes saved
+            questions, practice statistics, and related assessment data.
+          </p>
+        </div>
+
+        <div className="rounded-2xl border bg-background p-5 shadow-sm">
+          <h2 className="text-lg font-semibold">Import &amp; sync to cloud</h2>
+          <p className="mt-2 text-sm text-muted-foreground">
+            Import a backup file to restore your data locally. Sign in first and
+            your imported data will also sync to the cloud, keeping your
+            progress available on any device.
+          </p>
+        </div>
+      </div>
+
+      <section className="space-y-4 rounded-2xl border bg-background p-5 shadow-sm">
+        <p className="text-sm leading-6 text-muted-foreground">
+          Export creates a downloadable backup of everything stored locally —
+          useful before switching devices or browsers. Import restores that data
+          back into local storage.
+        </p>
+        <p className="text-sm leading-6 text-muted-foreground">
+          If you are signed in, importing will also sync your data to the cloud
+          so your progress is tied to your account.
+        </p>
+
+        <section className="flex flex-wrap gap-2 pt-2">
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={handleExport}
+            disabled={isExporting}
+          >
+            {isExporting ? "Exporting..." : "Export Backup"}
+          </Button>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={handleImportClick}
+            disabled={isImporting}
+          >
+            {isImporting ? "Importing..." : "Import Backup"}
+          </Button>
+        </section>
       </section>
+
       <input
         ref={fileInputRef}
         type="file"
@@ -136,7 +148,7 @@ export default function SessionsPage() {
       />
       {message && (
         <div
-          className={`mt-4 p-3 rounded-md ${
+          className={`rounded-md p-3 ${
             message.type === "success"
               ? "bg-green-100 text-green-800"
               : "bg-red-100 text-red-800"

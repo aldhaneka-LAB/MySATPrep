@@ -31,7 +31,10 @@ export interface QuestionDetail {
   questionId: string;
   externalId?: string | null;
   ibn?: string | null;
-  plainQuestion?: PlainQuestionType;
+  // plainQuestion intentionally omitted: never written by any current code path,
+  // never read back from the DB by any consumer. Old DB rows carrying plainQuestion
+  // are handled gracefully — collectionOperations strips it on every write and
+  // collectionsToSavedCollections() in use-resolved-user-data.ts ignores it on read.
 }
 
 // Saved collection with database fields
@@ -99,6 +102,10 @@ export interface UserDataState {
   answerHistory: AnswerHistory | null;
   questionNotes: QuestionNotes | null;
   vocabPracticePerformance: PracticePerformanceData | null;
+  /** True once fetchUserData has completed at least once. Used to prevent
+   *  duplicate initializations when SessionInitializer remounts (e.g. React
+   *  StrictMode double-invoke in development). */
+  dataInitialized: boolean;
   loading: {
     profile: boolean;
     statistics: boolean;

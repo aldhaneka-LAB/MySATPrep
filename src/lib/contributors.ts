@@ -16,7 +16,12 @@ export const members: Contributor[] = [
     role: "Creator",
   },
   {
-    username: "cjspd-oly",
-    role: "Community Helper & Bug Reporter",
-  },
+    username: "MIfoodie",
+    role: "Contributor",
+  }
+  //{
+  // this following account got deleted.
+    //username: "cjspd-oly",
+    //role: "Community Helper & Bug Reporter",
+  //},
 ];

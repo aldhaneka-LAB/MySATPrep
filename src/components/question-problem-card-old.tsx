@@ -43,32 +43,6 @@ import { DraggableDesmosPopup } from "./popups/desmos-popup";
 import { DraggableNotesPopup } from "./popups/notes-popup";
 import { getSubjectByPrimaryClassCd } from "@/static-data/domains";
 import { SaveButton } from "./ui/save-button";
-import { addQuestionStatistic } from "@/lib/practiceStatistics";
-import { store } from "@/lib/redux/store";
-import {
-  usePracticeStatisticsState,
-  useResolvedBookmarks,
-  useResolvedCollections,
-} from "@/hooks/use-resolved-user-data";
-import Fraction from "fraction.js";
-
-const checkAnswerValidity = (
-  userAnswer: string | null | undefined,
-  correctAnswers: (string | number)[] | undefined | null,
-): boolean => {
-  if (!userAnswer || !correctAnswers || correctAnswers.length === 0)
-    return false;
-
-  if (Number(userAnswer)) {
-    return correctAnswers
-      .map((e) => Number(new Fraction(String(e))) || String(e))
-      .includes(Number(new Fraction(userAnswer)) || userAnswer);
-  }
-
-  return correctAnswers
-    .map((a) => String(a).trim().toLowerCase())
-    .includes(userAnswer.trim().toLowerCase());
-};
 
 // Duolingo-styled Input Component
 interface DuolingoInputProps {
@@ -106,8 +80,8 @@ const DuolingoInput = React.memo(function DuolingoInput({
           disabled={disabled}
           className={`w-full px-4 py-4 text-lg font-medium border-2 border-b-4 rounded-2xl focus:outline-none transition-all duration-200 shadow-sm ${
             disabled
-              ? "border-border bg-muted text-muted-foreground cursor-not-allowed"
-              : "border-border focus:border-blue-500 focus:border-b-blue-500 focus:ring-0 bg-background text-foreground hover:shadow-md focus:shadow-lg placeholder:text-muted-foreground"
+              ? "border-gray-300 bg-gray-100 text-gray-500 cursor-not-allowed"
+              : "border-gray-300 focus:border-blue-500 focus:border-b-blue-500 focus:ring-0 bg-white hover:shadow-md focus:shadow-lg"
           }`}
         />
       </div>
@@ -128,56 +102,61 @@ const QuestionProblemCard = React.memo(function QuestionProblemCard({
   hideSubjectHeaders?: boolean;
   answerVisibility?: string;
 }) {
+  const sonner = useSonner();
   const router = useRouter();
 
-  const [savedQuestions, setSavedQuestions] = useResolvedBookmarks();
-  const [savedCollections] = useResolvedCollections();
+  // Load saved questions from localStorage
+  const [savedQuestions, setSavedQuestions] = useLocalStorage<SavedQuestions>(
+    "savedQuestions",
+    {},
+  );
 
+  // Load practice statistics from localStorage with setter
   const [practiceStatistics, setPracticeStatistics] =
-    usePracticeStatisticsState();
+    useLocalStorage<PracticeStatistics>("practiceStatistics", {});
 
-  // Question notes are device-local (not synced to cloud yet)
+  // Load question notes from localStorage
   const [questionNotes, setQuestionNotes] = useLocalStorage<QuestionNotes>(
     "questionNotes",
     {},
   );
 
-  // // Effect to keep practiceStatistics updated with latest localStorage data
-  // useEffect(() => {
-  //   const updatePracticeStatistics = () => {
-  //     try {
-  //       const currentStats = window.localStorage.getItem("practiceStatistics");
-  //       const parsedStats = currentStats ? JSON.parse(currentStats) : {};
+  // Effect to keep practiceStatistics updated with latest localStorage data
+  useEffect(() => {
+    const updatePracticeStatistics = () => {
+      try {
+        const currentStats = window.localStorage.getItem("practiceStatistics");
+        const parsedStats = currentStats ? JSON.parse(currentStats) : {};
 
-  //       // Only update if the data has actually changed
-  //       if (
-  //         JSON.stringify(practiceStatistics) !== JSON.stringify(parsedStats)
-  //       ) {
-  //         setPracticeStatistics(parsedStats);
-  //       }
-  //     } catch (error) {
-  //       console.error("Error syncing practiceStatistics:", error);
-  //     }
-  //   };
+        // Only update if the data has actually changed
+        if (
+          JSON.stringify(practiceStatistics) !== JSON.stringify(parsedStats)
+        ) {
+          setPracticeStatistics(parsedStats);
+        }
+      } catch (error) {
+        console.error("Error syncing practiceStatistics:", error);
+      }
+    };
 
-  //   // Update on storage events (changes from other tabs/windows)
-  //   const handleStorageChange = (e: StorageEvent) => {
-  //     if (e.key === "practiceStatistics") {
-  //       updatePracticeStatistics();
-  //     }
-  //   };
+    // Update on storage events (changes from other tabs/windows)
+    const handleStorageChange = (e: StorageEvent) => {
+      if (e.key === "practiceStatistics") {
+        updatePracticeStatistics();
+      }
+    };
 
-  //   // Reduce polling frequency to improve performance
-  //   const interval = setInterval(updatePracticeStatistics, 3000); // Changed from 1000ms to 3000ms
+    // Reduce polling frequency to improve performance
+    const interval = setInterval(updatePracticeStatistics, 3000); // Changed from 1000ms to 3000ms
 
-  //   // Listen for storage events
-  //   window.addEventListener("storage", handleStorageChange);
+    // Listen for storage events
+    window.addEventListener("storage", handleStorageChange);
 
-  //   return () => {
-  //     clearInterval(interval);
-  //     window.removeEventListener("storage", handleStorageChange);
-  //   };
-  // }, [practiceStatistics, setPracticeStatistics]);
+    return () => {
+      clearInterval(interval);
+      window.removeEventListener("storage", handleStorageChange);
+    };
+  }, [practiceStatistics, setPracticeStatistics]);
 
   // Load answer choice history from localStorage (for hidden answer mode)
   const [answerChoiceHistory, setAnswerChoiceHistory] = useLocalStorage<{
@@ -253,19 +232,11 @@ const QuestionProblemCard = React.memo(function QuestionProblemCard({
   // Check if current question is saved and if it has been answered before - optimized
   useEffect(() => {
     if (question && question.question && assessment) {
-      // Check if question is saved in savedQuestions OR in any collection - using memoized values
-      const isSavedInBookmarks = assessmentSavedQuestions.some(
+      // Check if question is saved - using memoized values
+      const isSaved = assessmentSavedQuestions.some(
         (q: SavedQuestion) => q.questionId === questionId,
       );
-
-      // Check if question is in any collection
-      const allCollections = Object.values(savedCollections);
-      const isSavedInCollection = allCollections.some((collection) =>
-        collection.questionIds.includes(questionId),
-      );
-
-      // Question is considered saved if it's in either bookmarks or any collection
-      setIsQuestionSaved(isSavedInBookmarks || isSavedInCollection);
+      setIsQuestionSaved(isSaved);
 
       // Check if question has a note - using memoized values
       const existingNote = assessmentNotes.find(
@@ -315,7 +286,6 @@ const QuestionProblemCard = React.memo(function QuestionProblemCard({
     assessmentSavedQuestions,
     assessmentNotes,
     assessmentStats,
-    savedCollections,
   ]);
 
   // Reset current session state when answerVisibility changes to "hide"
@@ -451,7 +421,13 @@ const QuestionProblemCard = React.memo(function QuestionProblemCard({
     (answer: string) => {
       if (!answer) return null;
 
-      return checkAnswerValidity(answer, question.problem.correct_answer);
+      return question.problem.answerOptions
+        ? question.problem.correct_answer?.includes(answer) || false
+        : question.problem.correct_answer?.some(
+            (correctAnswer) =>
+              correctAnswer.trim().toLowerCase() ===
+              answer.trim().toLowerCase(),
+          ) || false;
     },
     [question.problem.answerOptions, question.problem.correct_answer],
   );
@@ -474,10 +450,15 @@ const QuestionProblemCard = React.memo(function QuestionProblemCard({
   // Submit answer and save statistics - memoized to prevent recreation on every render
   const submitAnswer = useCallback(
     (answer: string) => {
-      const isCorrect = checkAnswerValidity(
-        answer,
-        question.problem.correct_answer,
-      );
+      // For multiple choice questions
+      const isCorrect = question.problem.answerOptions
+        ? question.problem.correct_answer?.includes(answer) || false
+        : // For text input questions, compare with correct answers (case insensitive, trimmed)
+          question.problem.correct_answer?.some(
+            (correctAnswer) =>
+              correctAnswer.trim().toLowerCase() ===
+              answer.trim().toLowerCase(),
+          ) || false;
 
       const timeElapsed = Date.now() - questionStartTime;
 
@@ -516,29 +497,53 @@ const QuestionProblemCard = React.memo(function QuestionProblemCard({
           updatedHistory: updatedHistory[questionId],
         });
       } else {
-        // Handle saving with new generalized function from practiceStatistics
-        addQuestionStatistic(
-          {
-            questionId,
-            assessment: assessment as any,
-            difficulty:
-              (question.question.difficulty as "E" | "M" | "H") || "M",
-            primaryClassCd: question.question.primary_class_cd as any,
-            skillCd: question.question.skill_cd as any,
-            plainQuestion: question.question,
-            statistic: {
-              answer,
-              isCorrect,
-              time: timeElapsed,
-            },
-            external_id: question.question.external_id || undefined,
-            ibn: question.question.ibn || undefined,
-          },
-          { dispatch: store.dispatch, state: store.getState() },
-        );
+        // Save to practiceStatistics when answer visibility is shown
+        const updatedStats = { ...practiceStatistics };
+
+        // Initialize assessment stats if they don't exist
+        if (!updatedStats[assessment]) {
+          updatedStats[assessment] = {
+            answeredQuestions: [],
+            answeredQuestionsDetailed: [],
+            statistics: {},
+          };
+        }
+
+        const assessmentStats = updatedStats[assessment];
+
+        // Add to answered questions if not already there
+        if (!assessmentStats.answeredQuestions?.includes(questionId)) {
+          assessmentStats.answeredQuestions =
+            assessmentStats.answeredQuestions || [];
+          assessmentStats.answeredQuestions.push(questionId);
+        }
+
+        // Add detailed answer information
+        assessmentStats.answeredQuestionsDetailed =
+          assessmentStats.answeredQuestionsDetailed || [];
+
+        // Remove existing entry if it exists (for re-answering)
+        assessmentStats.answeredQuestionsDetailed =
+          assessmentStats.answeredQuestionsDetailed.filter(
+            (q) => q.questionId !== questionId,
+          );
+
+        // Add new entry
+        assessmentStats.answeredQuestionsDetailed.push({
+          questionId,
+          difficulty: question.question.difficulty || "M", // Default to Medium if not specified
+          isCorrect,
+          timeSpent: timeElapsed,
+          timestamp: new Date().toISOString(),
+          selectedAnswer: answer, // Store user's selected answer
+          plainQuestion: question.question,
+        });
+
+        // Save to localStorage
+        setPracticeStatistics(updatedStats);
 
         // Debug logging
-        console.log("Question answered and saved using addQuestionStatistic:", {
+        console.log("Question answered and saved to practiceStatistics:", {
           questionId,
           selectedAnswer: answer,
           isCorrect,
@@ -546,6 +551,7 @@ const QuestionProblemCard = React.memo(function QuestionProblemCard({
           questionType: question.problem.answerOptions
             ? "multiple-choice"
             : "text-input",
+          updatedStats: updatedStats[assessment]?.answeredQuestionsDetailed,
         });
       }
 
@@ -633,10 +639,10 @@ const QuestionProblemCard = React.memo(function QuestionProblemCard({
       {/* Subject and Skill Headers */}
       {!hideSubjectHeaders && (
         <div className="mb-4 space-y-2">
-          <h3 className="text-lg font-bold text-foreground">
+          <h3 className="text-lg font-bold text-gray-800">
             {question.question.primary_class_cd_desc}
           </h3>
-          <h3 className="text-base font-semibold text-muted-foreground">
+          <h3 className="text-base font-semibold text-gray-600">
             {question.question.skill_desc}
           </h3>
         </div>
@@ -644,11 +650,7 @@ const QuestionProblemCard = React.memo(function QuestionProblemCard({
 
       <Card
         variant="accent"
-        className={cn(
-          "w-full",
-          "transition-all duration-300",
-          "questionProblemCard",
-        )}
+        className={cn("w-full", "transition-all duration-300")}
       >
         <CardHeader>
           <CardHeading className="w-full">
@@ -687,7 +689,7 @@ const QuestionProblemCard = React.memo(function QuestionProblemCard({
                     <>
                       <Button
                         variant="default"
-                        className="flex group cursor-pointer items-center gap-1 md:gap-2 font-bold py-2 md:py-3 px-3 md:px-6 rounded-xl md:rounded-2xl border-b-4 shadow-md hover:shadow-lg transform transition-all duration-200 active:translate-y-0.5 active:border-b-2 bg-background hover:bg-muted text-foreground border-border hover:border-border text-xs md:text-sm"
+                        className="flex group cursor-pointer items-center gap-1 md:gap-2 font-bold py-2 md:py-3 px-3 md:px-6 rounded-xl md:rounded-2xl border-b-4 shadow-md hover:shadow-lg transform transition-all duration-200 active:translate-y-0.5 active:border-b-2 bg-white hover:bg-gray-50 text-gray-700 border-gray-300 hover:border-gray-400 text-xs md:text-sm"
                         onClick={() => {
                           playSound("button-pressed.wav");
                           setIsReferencePopupOpen(
@@ -721,8 +723,8 @@ const QuestionProblemCard = React.memo(function QuestionProblemCard({
                     variant="default"
                     className={`flex cursor-pointer items-center gap-1 md:gap-2 font-bold py-2 md:py-3 px-3 md:px-6 rounded-xl md:rounded-2xl border-b-4 shadow-md hover:shadow-lg transform transition-all duration-200 active:translate-y-0.5 active:border-b-2 text-xs md:text-sm ${
                       hasNote
-                        ? "bg-gray-600 hover:bg-gray-700 dark:bg-neutral-600 dark:hover:bg-neutral-500 text-white border-gray-800 dark:border-neutral-700 hover:border-gray-900"
-                        : "bg-gray-600 hover:bg-gray-700 dark:bg-neutral-600 dark:hover:bg-neutral-500 text-white border-gray-800 dark:border-neutral-700 hover:border-gray-900"
+                        ? "bg-gray-600 hover:bg-gray-700 text-white border-gray-800 hover:border-gray-900"
+                        : "bg-gray-600 hover:bg-gray-700 text-white border-gray-800 hover:border-gray-900"
                     }`}
                     onClick={() => {
                       playSound("button-pressed.wav");
@@ -799,7 +801,6 @@ const QuestionProblemCard = React.memo(function QuestionProblemCard({
               <span
                 id="question_explanation"
                 className="text-lg text-justify"
-                suppressHydrationWarning
                 dangerouslySetInnerHTML={{
                   __html: question.problem.stimulus
                     ? question.problem.stimulus
@@ -813,7 +814,6 @@ const QuestionProblemCard = React.memo(function QuestionProblemCard({
               <span
                 id="question_explanation"
                 className="text-lg text-justify"
-                suppressHydrationWarning
                 dangerouslySetInnerHTML={{
                   __html: question.problem.stem ? question.problem.stem : "",
                 }}
@@ -828,10 +828,9 @@ const QuestionProblemCard = React.memo(function QuestionProblemCard({
               <RadioGroup className="flex flex-col gap-3" disabled>
                 {Object.entries(question.problem.answerOptions).map(
                   ([optionKey, optionText], index) => {
-                    const isCorrect = checkAnswerValidity(
-                      optionKey,
-                      question.problem.correct_answer,
-                    );
+                    const isCorrect =
+                      question.problem.correct_answer?.includes(optionKey) ||
+                      false;
 
                     // For current session answers
                     const isSelected = selectedAnswer === optionKey;
@@ -924,7 +923,7 @@ const QuestionProblemCard = React.memo(function QuestionProblemCard({
                                           (isPreviousUserAnswer &&
                                             answerVisibility !== "hide")
                                         ? "border-blue-500 bg-blue-500 text-white"
-                                        : "border-border bg-muted text-muted-foreground"
+                                        : "border-gray-300 bg-gray-50 text-gray-600"
                                 }`}
                               >
                                 {showCorrectAnswer ? (
@@ -947,7 +946,6 @@ const QuestionProblemCard = React.memo(function QuestionProblemCard({
                                 <span
                                   id="question_explanation"
                                   className="text-xl inline-block"
-                                  suppressHydrationWarning
                                   dangerouslySetInnerHTML={{
                                     __html: optionText,
                                   }}
@@ -988,8 +986,8 @@ const QuestionProblemCard = React.memo(function QuestionProblemCard({
                       <span
                         className={`text-sm font-medium ${
                           questionStats.isCorrect
-                            ? "text-green-700 dark:text-green-400"
-                            : "text-red-700 dark:text-red-400"
+                            ? "text-green-700"
+                            : "text-red-700"
                         }`}
                       >
                         Your answer is{" "}
@@ -1033,8 +1031,8 @@ const QuestionProblemCard = React.memo(function QuestionProblemCard({
                     {checkAnswerCorrectness(selectedAnswer) && (
                       <div className="p-2 rounded-lg border-2 border-green-500 bg-green-500/10">
                         <div className="flex items-center gap-2">
-                          <CheckCircle className="h-4 w-4 text-green-600 dark:text-green-400" />
-                          <span className="text-sm font-medium text-green-700 dark:text-green-400">
+                          <CheckCircle className="h-4 w-4 text-green-600" />
+                          <span className="text-sm font-medium text-green-700">
                             Looks correct! Press Enter to submit.
                           </span>
                         </div>
@@ -1070,8 +1068,8 @@ const QuestionProblemCard = React.memo(function QuestionProblemCard({
                       <span
                         className={`text-sm font-medium ${
                           questionStats.isCorrect
-                            ? "text-green-700 dark:text-green-400"
-                            : "text-red-700 dark:text-red-400"
+                            ? "text-green-700"
+                            : "text-red-700"
                         }`}
                       >
                         Your previous answer was{" "}
@@ -1103,8 +1101,8 @@ const QuestionProblemCard = React.memo(function QuestionProblemCard({
                     <span
                       className={`text-sm font-medium ${
                         questionStats.isCorrect
-                          ? "text-green-700 dark:text-green-400"
-                          : "text-red-700 dark:text-red-400"
+                          ? "text-green-700"
+                          : "text-red-700"
                       }`}
                     >
                       Your answer is{" "}
@@ -1120,8 +1118,8 @@ const QuestionProblemCard = React.memo(function QuestionProblemCard({
                   question.problem.correct_answer && (
                     <div className="mt-2 p-3 rounded-lg border-2 border-green-500 bg-green-500/10">
                       <div className="flex items-center gap-2">
-                        <CheckCircle className="h-5 w-5 text-green-600 dark:text-green-400" />
-                        <span className="text-sm font-medium text-green-700 dark:text-green-400">
+                        <CheckCircle className="h-5 w-5 text-green-600" />
+                        <span className="text-sm font-medium text-green-700">
                           Correct answer
                           {question.problem.correct_answer.length > 1
                             ? "s"
@@ -1138,8 +1136,8 @@ const QuestionProblemCard = React.memo(function QuestionProblemCard({
                   question.problem.correct_answer && (
                     <div className="mt-2 p-3 rounded-lg border-2 border-green-500 bg-green-500/10">
                       <div className="flex items-center gap-2">
-                        <CheckCircle className="h-5 w-5 text-green-600 dark:text-green-400" />
-                        <span className="text-sm font-medium text-green-700 dark:text-green-400">
+                        <CheckCircle className="h-5 w-5 text-green-600" />
+                        <span className="text-sm font-medium text-green-700">
                           Correct answer
                           {question.problem.correct_answer.length > 1
                             ? "s"
@@ -1170,7 +1168,6 @@ const QuestionProblemCard = React.memo(function QuestionProblemCard({
               >
                 <span
                   className="text-sm md:text-lg lg:text-xl"
-                  suppressHydrationWarning
                   dangerouslySetInnerHTML={{
                     __html: question.problem.rationale,
                   }}
@@ -1191,7 +1188,6 @@ const QuestionProblemCard = React.memo(function QuestionProblemCard({
               >
                 <span
                   className="text-sm md:text-lg lg:text-xl"
-                  suppressHydrationWarning
                   dangerouslySetInnerHTML={{
                     __html: question.problem.rationale,
                   }}
@@ -1202,10 +1198,10 @@ const QuestionProblemCard = React.memo(function QuestionProblemCard({
 
       {/* Share Modal */}
       {isShareModalOpen && (
-        <div className="fixed inset-0 flex items-center justify-center z-[200] bg-black/20 dark:bg-black/50">
-          <div className="bg-background rounded-2xl border-2 border-b-4 border-border shadow-2xl p-6 max-w-md w-full mx-4">
+        <div className="fixed inset-0 flex items-center justify-center z-50 bg-black/20">
+          <div className="bg-white rounded-2xl border-2 border-b-4 border-gray-300 shadow-2xl p-6 max-w-md w-full mx-4">
             <div className="flex items-center justify-between mb-4">
-              <h3 className="text-xl font-bold text-foreground">
+              <h3 className="text-xl font-bold text-gray-800">
                 📤 Share Question
               </h3>
               <Button
@@ -1222,7 +1218,7 @@ const QuestionProblemCard = React.memo(function QuestionProblemCard({
               </Button>
             </div>
 
-            <p className="text-muted-foreground mb-4">
+            <p className="text-gray-600 mb-4">
               Share this question with others by copying the link below:
             </p>
 
@@ -1231,7 +1227,7 @@ const QuestionProblemCard = React.memo(function QuestionProblemCard({
                 type="text"
                 value={shareUrl}
                 readOnly
-                className="flex-1 px-3 py-2 border-2 rounded-xl bg-muted text-foreground text-sm"
+                className="flex-1 px-3 py-2 border-2 rounded-xl bg-gray-50 text-sm"
               />
               <Button
                 variant="default"
@@ -1264,14 +1260,14 @@ const QuestionProblemCard = React.memo(function QuestionProblemCard({
                     playSound("button-pressed.wav");
                     router.push(`/question/${question.question.questionId}`);
                   }}
-                  className="w-full px-4 py-2 rounded-xl border-2 border-b-4 font-bold transition-all duration-200 bg-gray-500 hover:bg-gray-600 dark:bg-neutral-600 dark:hover:bg-neutral-500 border-gray-700 dark:border-neutral-700 text-white"
+                  className="w-full px-4 py-2 rounded-xl border-2 border-b-4 font-bold transition-all duration-200 bg-gray-500 hover:bg-gray-600 border-gray-700 text-white"
                 >
                   🔗 View Question Page
                 </Button>
               </div>
             )}
 
-            <div className="text-xs text-muted-foreground">
+            <div className="text-xs text-gray-500">
               Anyone with this link can view this specific question.
             </div>
           </div>

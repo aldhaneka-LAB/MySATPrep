@@ -69,6 +69,7 @@ export interface StatisticEntry {
   skillCd: SkillCd_Variants;
   questionId: string;
   statistic: QuestionStatistic;
+  difficulty: "E" | "M" | "H";
   external_id?: string;
   ibn?: string;
   plainQuestion?: PlainQuestionType; // Full question metadata

@@ -1,8 +1,13 @@
 /**
  * Sync Database Operations
  *
- * Upserts for all user data categories. Each category is written as a
- * standalone statement via pool.query() — no manual BEGIN/COMMIT.
+ * Upserts for all user data categories. The client (syncLocalStorageData thunk)
+ * performs the full merge of DB + localStorage data before sending the payload,
+ * so each upsert here simply **replaces** the existing row with the pre-merged
+ * values rather than doing a second server-side merge.
+ *
+ * Each category is written as a standalone statement via pool.query() — no
+ * manual BEGIN/COMMIT.
  *
  * Why no transaction:
  *   The app uses a PgBouncer pooler (DATABASE_URL). PgBouncer in transaction
@@ -72,24 +77,14 @@ export async function syncUserData(
           incorrect_answers, last_activity, xp_history)
        VALUES ($1, $2, $3, $4, $5, $6, $7, $8::jsonb)
        ON CONFLICT (user_id) DO UPDATE SET
-         total_xp           = GREATEST(user_profiles.total_xp,           EXCLUDED.total_xp),
-         level              = GREATEST(user_profiles.level,              EXCLUDED.level),
-         questions_answered = GREATEST(user_profiles.questions_answered, EXCLUDED.questions_answered),
-         correct_answers    = GREATEST(user_profiles.correct_answers,    EXCLUDED.correct_answers),
-         incorrect_answers  = GREATEST(user_profiles.incorrect_answers,  EXCLUDED.incorrect_answers),
-         last_activity      = GREATEST(user_profiles.last_activity,      EXCLUDED.last_activity),
-         xp_history = (
-           SELECT jsonb_agg(entry ORDER BY (entry->>'timestamp') ASC)
-           FROM (
-             SELECT DISTINCT ON ((entry->>'questionId'), (entry->>'timestamp')) entry
-             FROM (
-               SELECT jsonb_array_elements(user_profiles.xp_history) AS entry
-               UNION ALL
-               SELECT jsonb_array_elements(EXCLUDED.xp_history)      AS entry
-             ) combined
-           ) deduped
-         ),
-         updated_at = CURRENT_TIMESTAMP`,
+         total_xp           = EXCLUDED.total_xp,
+         level              = EXCLUDED.level,
+         questions_answered  = EXCLUDED.questions_answered,
+         correct_answers    = EXCLUDED.correct_answers,
+         incorrect_answers  = EXCLUDED.incorrect_answers,
+         last_activity      = EXCLUDED.last_activity,
+         xp_history         = EXCLUDED.xp_history,
+         updated_at         = CURRENT_TIMESTAMP`,
       [
         userId,
         data.profile.totalXP ?? 0,
@@ -110,9 +105,7 @@ export async function syncUserData(
       if (!stats) continue;
 
       // Strip plainQuestion and promote primary_class_cd / skill_cd before
-      // writing. The SQL merge uses DISTINCT ON (entry->>'questionId') which
-      // only looks at the key — not at plainQuestion — so stripping here is
-      // safe and does not affect the dedup logic.
+      // writing.
       const strippedDetailed = stripAnsweredQuestionsDetailed(
         (stats.answeredQuestionsDetailed ?? []) as AnsweredQuestion[],
       );
@@ -125,28 +118,10 @@ export async function syncUserData(
            (user_id, assessment, answered_questions, answered_questions_detailed, statistics)
          VALUES ($1, $2, $3::jsonb, $4::jsonb, $5::jsonb)
          ON CONFLICT (user_id, assessment) DO UPDATE SET
-           answered_questions = (
-             SELECT jsonb_agg(DISTINCT val)
-             FROM (
-               SELECT jsonb_array_elements_text(practice_statistics.answered_questions) AS val
-               UNION
-               SELECT jsonb_array_elements_text(EXCLUDED.answered_questions)            AS val
-             ) merged
-           ),
-           answered_questions_detailed = (
-             SELECT jsonb_agg(entry)
-             FROM (
-               SELECT DISTINCT ON (entry->>'questionId') entry
-               FROM (
-                 SELECT jsonb_array_elements(practice_statistics.answered_questions_detailed) AS entry
-                 UNION ALL
-                 SELECT jsonb_array_elements(EXCLUDED.answered_questions_detailed)            AS entry
-               ) combined
-               ORDER BY entry->>'questionId', (entry->>'timestamp') DESC NULLS LAST
-             ) deduped
-           ),
-           statistics = practice_statistics.statistics || EXCLUDED.statistics,
-           updated_at = CURRENT_TIMESTAMP`,
+           answered_questions          = EXCLUDED.answered_questions,
+           answered_questions_detailed = EXCLUDED.answered_questions_detailed,
+           statistics                  = EXCLUDED.statistics,
+           updated_at                  = CURRENT_TIMESTAMP`,
         [
           userId,
           assessment,
@@ -200,9 +175,9 @@ export async function syncUserData(
            VALUES ($1, $2, $3, $4, $5, $6::jsonb)
            ON CONFLICT (user_id, question_id) DO UPDATE SET
              assessment     = EXCLUDED.assessment,
-             external_id    = COALESCE(EXCLUDED.external_id,    saved_questions.external_id),
-             ibn            = COALESCE(EXCLUDED.ibn,            saved_questions.ibn),
-             plain_question = COALESCE(EXCLUDED.plain_question, saved_questions.plain_question)`,
+             external_id    = EXCLUDED.external_id,
+             ibn            = EXCLUDED.ibn,
+             plain_question = EXCLUDED.plain_question`,
           [
             userId,
             bookmark.assessment,
@@ -238,31 +213,12 @@ export async function syncUserData(
            (user_id, collection_id, name, description, question_ids, question_details, color)
          VALUES ($1, $2, $3, $4, $5::jsonb, $6::jsonb, $7)
          ON CONFLICT (user_id, collection_id) DO UPDATE SET
-           name        = EXCLUDED.name,
-           description = COALESCE(EXCLUDED.description, saved_collections.description),
-           question_ids = (
-             SELECT jsonb_agg(DISTINCT val)
-             FROM (
-               SELECT jsonb_array_elements_text(saved_collections.question_ids) AS val
-               UNION
-               SELECT jsonb_array_elements_text(EXCLUDED.question_ids)          AS val
-             ) merged
-           ),
-           question_details = (
-             SELECT jsonb_agg(entry)
-             FROM (
-               SELECT DISTINCT ON (entry->>'questionId') entry
-               FROM (
-                 SELECT jsonb_array_elements(saved_collections.question_details) AS entry
-                 UNION ALL
-                 SELECT jsonb_array_elements(EXCLUDED.question_details)          AS entry
-               ) combined
-               ORDER BY entry->>'questionId'
-             ) deduped
-           ),
-           color      = COALESCE(EXCLUDED.color, saved_collections.color),
-           updated_at = CURRENT_TIMESTAMP
-         WHERE saved_collections.user_id = EXCLUDED.user_id`,
+           name             = EXCLUDED.name,
+           description      = EXCLUDED.description,
+           question_ids     = EXCLUDED.question_ids,
+           question_details = EXCLUDED.question_details,
+           color            = EXCLUDED.color,
+           updated_at       = CURRENT_TIMESTAMP`,
           [
             userId,
             collection.collectionId,
@@ -292,7 +248,7 @@ export async function syncUserData(
       `INSERT INTO vocabulary_progress (user_id, progress_data)
        VALUES ($1, $2::jsonb)
        ON CONFLICT (user_id) DO UPDATE SET
-         progress_data = vocabulary_progress.progress_data || EXCLUDED.progress_data,
+         progress_data = EXCLUDED.progress_data,
          updated_at    = CURRENT_TIMESTAMP`,
       [userId, JSON.stringify(data.vocabulary)],
     );
@@ -305,7 +261,7 @@ export async function syncUserData(
       `INSERT INTO user_preferences (user_id, preferences_data)
        VALUES ($1, $2::jsonb)
        ON CONFLICT (user_id) DO UPDATE SET
-         preferences_data = user_preferences.preferences_data || EXCLUDED.preferences_data,
+         preferences_data = EXCLUDED.preferences_data,
          updated_at       = CURRENT_TIMESTAMP`,
       [userId, JSON.stringify(data.preferences)],
     );
@@ -318,7 +274,7 @@ export async function syncUserData(
       `INSERT INTO question_notes (user_id, notes_data)
        VALUES ($1, $2::jsonb)
        ON CONFLICT (user_id) DO UPDATE SET
-         notes_data = question_notes.notes_data || EXCLUDED.notes_data,
+         notes_data = EXCLUDED.notes_data,
          updated_at = CURRENT_TIMESTAMP`,
       [userId, JSON.stringify(data.questionNotes)],
     );
@@ -331,7 +287,7 @@ export async function syncUserData(
       `INSERT INTO answer_history (user_id, history_data)
        VALUES ($1, $2::jsonb)
        ON CONFLICT (user_id) DO UPDATE SET
-         history_data = answer_history.history_data || EXCLUDED.history_data,
+         history_data = EXCLUDED.history_data,
          updated_at   = CURRENT_TIMESTAMP`,
       [userId, JSON.stringify(data.answerHistory)],
     );
@@ -344,61 +300,8 @@ export async function syncUserData(
       `INSERT INTO vocab_practice_performance (user_id, performance_data)
        VALUES ($1, $2::jsonb)
        ON CONFLICT (user_id) DO UPDATE SET
-         performance_data = jsonb_build_object(
-           'attempts', (
-             SELECT jsonb_agg(entry)
-             FROM (
-               SELECT DISTINCT ON ((entry->>'word'), (entry->>'timestamp')) entry
-               FROM (
-                 SELECT jsonb_array_elements(vocab_practice_performance.performance_data->'attempts') AS entry
-                 UNION ALL
-                 SELECT jsonb_array_elements(EXCLUDED.performance_data->'attempts')                   AS entry
-               ) combined
-             ) deduped
-           ),
-           'wordPerformance',
-             vocab_practice_performance.performance_data->'wordPerformance' ||
-             EXCLUDED.performance_data->'wordPerformance',
-           'lastUpdated',
-             GREATEST(
-               (vocab_practice_performance.performance_data->>'lastUpdated')::bigint,
-               (EXCLUDED.performance_data->>'lastUpdated')::bigint
-             ),
-           'totalQuizzesTaken',
-             GREATEST(
-               (vocab_practice_performance.performance_data->>'totalQuizzesTaken')::int,
-               (EXCLUDED.performance_data->>'totalQuizzesTaken')::int
-             ),
-           'overallAccuracy',
-             CASE
-               WHEN (vocab_practice_performance.performance_data->>'totalQuizzesTaken')::int >=
-                    (EXCLUDED.performance_data->>'totalQuizzesTaken')::int
-               THEN vocab_practice_performance.performance_data->'overallAccuracy'
-               ELSE EXCLUDED.performance_data->'overallAccuracy'
-             END,
-           'strongWords',
-             CASE
-               WHEN (vocab_practice_performance.performance_data->>'totalQuizzesTaken')::int >=
-                    (EXCLUDED.performance_data->>'totalQuizzesTaken')::int
-               THEN vocab_practice_performance.performance_data->'strongWords'
-               ELSE EXCLUDED.performance_data->'strongWords'
-             END,
-           'weakWords',
-             CASE
-               WHEN (vocab_practice_performance.performance_data->>'totalQuizzesTaken')::int >=
-                    (EXCLUDED.performance_data->>'totalQuizzesTaken')::int
-               THEN vocab_practice_performance.performance_data->'weakWords'
-               ELSE EXCLUDED.performance_data->'weakWords'
-             END,
-           'improvingWords',
-             CASE
-               WHEN (vocab_practice_performance.performance_data->>'totalQuizzesTaken')::int >=
-                    (EXCLUDED.performance_data->>'totalQuizzesTaken')::int
-               THEN vocab_practice_performance.performance_data->'improvingWords'
-               ELSE EXCLUDED.performance_data->'improvingWords'
-             END
-         ),
-         updated_at = CURRENT_TIMESTAMP`,
+         performance_data = EXCLUDED.performance_data,
+         updated_at       = CURRENT_TIMESTAMP`,
       [userId, JSON.stringify(data.practicePerformance)],
     );
     summary.practicePerformanceMigrated = true;

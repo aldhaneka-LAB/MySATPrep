@@ -85,7 +85,7 @@ export async function GET(
           continue;
         }
 
-        const questionResult = await fetchQuestionData(questionId);
+        const questionResult = await fetchQuestionData(questionId, true);
 
         if (questionResult.success && questionResult.data) {
           // console.log(

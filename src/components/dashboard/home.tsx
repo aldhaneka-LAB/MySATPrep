@@ -244,7 +244,7 @@ export function HomeTab({ selectedAssessment }: HomeTabProps) {
           statistics={
             isAuthenticated
               ? (reduxStatistics as PracticeStatistics)
-              : undefined
+              : (localStats as PracticeStatistics)
           }
         />
 

@@ -54,6 +54,7 @@ import { debounce } from "@/lib/utils/debounce";
  * Returns true if the current Redux state indicates an authenticated user.
  */
 function isAuthenticated(state: RootState): boolean {
+  console.log("state.auth.isAuthenticated", state.auth.isAuthenticated);
   return state.auth.isAuthenticated;
 }
 
@@ -136,6 +137,7 @@ export function savePracticeSession(
   dispatch: AppDispatch,
   state: RootState,
 ): void {
+  console.log("PRACTICE SESSION DATA ", data);
   if (isAuthenticated(state)) {
     withRetry(
       () => dispatch(createSession(data)) as unknown as Promise<unknown>,
@@ -663,6 +665,8 @@ export function saveCurrentSession(
   dispatch: AppDispatch,
   state: RootState,
 ): void {
+  console.log("PRACTICE SESSION DATA ", data);
+
   // Always write to localStorage first (crash-recovery guarantee)
   try {
     localStorage.setItem("currentPracticeSession", JSON.stringify(data));
@@ -672,6 +676,8 @@ export function saveCurrentSession(
       error,
     );
   }
+
+  console.log("SAVE CURRENT SESSION (THE STATE) : ", state);
 
   if (isAuthenticated(state)) {
     // Check if session exists in Redux store
@@ -691,6 +697,8 @@ export function saveCurrentSession(
         );
       });
     } else {
+      console.log("ELSE: CREATE NEW SESSION");
+      // Optimistically update Redux so the new session is immediately available in the UI
       withRetry(
         () => dispatch(createSession(data)) as unknown as Promise<unknown>,
       ).catch(() => {
@@ -710,8 +718,10 @@ export function saveCurrentSession(
  * Validates: Requirement 5.2
  */
 export const debouncedSaveCurrentSession = debounce(
-  (data: PracticeSession, dispatch: AppDispatch, state: RootState) =>
-    saveCurrentSession(data, dispatch, state),
+  (data: PracticeSession, dispatch: AppDispatch, state: RootState) => {
+    console.log("debouncedSaveCurrentSession");
+    return saveCurrentSession(data, dispatch, state);
+  },
   1000,
 );
 

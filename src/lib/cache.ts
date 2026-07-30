@@ -13,34 +13,50 @@ const cacheConfigs = {
   vocabPracticePerformance: { max: 1000, ttl: 5 * 60 * 1000 },
 };
 
-export const userProfileCache = new LRUCache<string, any>(
-  cacheConfigs.userProfile,
-);
-export const statisticsCache = new LRUCache<string, any>(
-  cacheConfigs.practiceStatistics,
-);
-export const sessionsCache = new LRUCache<string, any>(
-  cacheConfigs.practiceSessions,
-);
-export const bookmarksCache = new LRUCache<string, any>(
-  cacheConfigs.savedQuestions,
-);
-export const collectionsCache = new LRUCache<string, any>(
-  cacheConfigs.savedCollections,
-);
-export const vocabularyCache = new LRUCache<string, any>(
-  cacheConfigs.vocabularyProgress,
-);
-export const preferencesCache = new LRUCache<string, any>(
-  cacheConfigs.userPreferences,
-);
-export const notesCache = new LRUCache<string, any>(cacheConfigs.questionNotes);
-export const answerHistoryCache = new LRUCache<string, any>(
-  cacheConfigs.answerHistory,
-);
-export const vocabPracticePerformanceCache = new LRUCache<string, any>(
-  cacheConfigs.vocabPracticePerformance,
-);
+const globalForCache = globalThis as unknown as {
+  _lruCaches?: {
+    userProfile: LRUCache<string, any>;
+    statistics: LRUCache<string, any>;
+    sessions: LRUCache<string, any>;
+    bookmarks: LRUCache<string, any>;
+    collections: LRUCache<string, any>;
+    vocabulary: LRUCache<string, any>;
+    preferences: LRUCache<string, any>;
+    notes: LRUCache<string, any>;
+    answerHistory: LRUCache<string, any>;
+    vocabPracticePerformance: LRUCache<string, any>;
+  };
+};
+
+const caches = globalForCache._lruCaches ?? {
+  userProfile: new LRUCache<string, any>(cacheConfigs.userProfile),
+  statistics: new LRUCache<string, any>(cacheConfigs.practiceStatistics),
+  sessions: new LRUCache<string, any>(cacheConfigs.practiceSessions),
+  bookmarks: new LRUCache<string, any>(cacheConfigs.savedQuestions),
+  collections: new LRUCache<string, any>(cacheConfigs.savedCollections),
+  vocabulary: new LRUCache<string, any>(cacheConfigs.vocabularyProgress),
+  preferences: new LRUCache<string, any>(cacheConfigs.userPreferences),
+  notes: new LRUCache<string, any>(cacheConfigs.questionNotes),
+  answerHistory: new LRUCache<string, any>(cacheConfigs.answerHistory),
+  vocabPracticePerformance: new LRUCache<string, any>(
+    cacheConfigs.vocabPracticePerformance,
+  ),
+};
+
+if (process.env.NODE_ENV !== "production") {
+  globalForCache._lruCaches = caches;
+}
+
+export const userProfileCache = caches.userProfile;
+export const statisticsCache = caches.statistics;
+export const sessionsCache = caches.sessions;
+export const bookmarksCache = caches.bookmarks;
+export const collectionsCache = caches.collections;
+export const vocabularyCache = caches.vocabulary;
+export const preferencesCache = caches.preferences;
+export const notesCache = caches.notes;
+export const answerHistoryCache = caches.answerHistory;
+export const vocabPracticePerformanceCache = caches.vocabPracticePerformance;
 
 export function getCacheKey(
   type: string,

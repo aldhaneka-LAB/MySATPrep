@@ -146,7 +146,7 @@ function findCorrectChoiceOrAnswerOnIBNQuestion(
 
 export async function fetchQuestionData(
   questionId: string,
-  isMyPractice: boolean = false,
+  withInternal: boolean = false,
 ): Promise<QuestionFetchResult> {
   if (!questionId || questionId === "") {
     return {
@@ -242,39 +242,41 @@ export async function fetchQuestionData(
     }
   }
 
-  // Handle regular questions - try internal API first, then fall back to qbank-api
-  const internalApiUrl = getInternalAPITargetURL();
+  if (withInternal) {
+    // Handle regular questions - try internal API first, then fall back to qbank-api
+    const internalApiUrl = getInternalAPITargetURL();
 
-  // Try internal API (Neon database) first
-  try {
-    const internalResponse = await fetch(
-      `${internalApiUrl}/api/student-qb/question/${questionId}`,
-      {
-        method: "GET",
-        headers: {
-          "Content-Type": "application/json",
-          Accept: "application/json",
+    // Try internal API (Neon database) first
+    try {
+      const internalResponse = await fetch(
+        `${internalApiUrl}/api/student-qb/question/${questionId}`,
+        {
+          method: "GET",
+          headers: {
+            "Content-Type": "application/json",
+            Accept: "application/json",
+          },
         },
-      },
-    );
+      );
 
-    if (internalResponse.ok) {
-      const internalData = (await internalResponse.json()) as {
-        success: boolean;
-        data?: API_Response_Question;
-      };
-      if (internalData.success && internalData.data) {
-        return {
-          success: true,
-          data: internalData.data,
+      if (internalResponse.ok) {
+        const internalData = (await internalResponse.json()) as {
+          success: boolean;
+          data?: API_Response_Question;
         };
+        if (internalData.success && internalData.data) {
+          return {
+            success: true,
+            data: internalData.data,
+          };
+        }
       }
+    } catch (internalError) {
+      console.warn(
+        "Internal API call failed, falling back to qbank-api:",
+        internalError,
+      );
     }
-  } catch (internalError) {
-    console.warn(
-      "Internal API call failed, falling back to qbank-api:",
-      internalError,
-    );
   }
 
   // Fall back to qbank-api

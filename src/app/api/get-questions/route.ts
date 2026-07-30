@@ -139,49 +139,6 @@ export async function GET(request: NextRequest) {
     const data: API_Response_Question_List | undefined = await response.json();
 
     questions = [...questions, ...(data || [])];
-
-    // Also call the internal student-qb API
-    try {
-      const internalApiUrl = getInternalAPITargetURL();
-      const queryParams = new URLSearchParams();
-
-      if (domainsParam) queryParams.append("domains", domainsParam);
-      if (assessment) queryParams.append("assessment", assessment);
-      if (excludeQuestionIdsParam)
-        queryParams.append("excludeIds", excludeQuestionIdsParam);
-      if (difficultiesParam)
-        queryParams.append("difficulties", difficultiesParam);
-      if (skillCdsParam) queryParams.append("skills", skillCdsParam);
-      if (random) queryParams.append("random", random);
-
-      const internalResponse = await fetch(
-        `${internalApiUrl}/api/student-qb/get-questions?${queryParams.toString()}`,
-        {
-          method: "GET",
-          headers: {
-            "Content-Type": "application/json",
-            Accept: "application/json",
-          },
-        },
-      );
-
-      if (internalResponse.ok) {
-        const internalData = (await internalResponse.json()) as {
-          success: boolean;
-          data?: API_Response_Question_List;
-        };
-        // console.log("questions length", questions?.length);
-
-        questions = [...questions, ...(internalData.data || [])];
-
-        // console.log("internalData.data length", internalData.data?.length);
-      }
-    } catch (internalError) {
-      console.warn(
-        "Internal API call failed, continuing with CB data:",
-        internalError,
-      );
-    }
   } catch (error) {
     console.error("Error fetching questions:", error);
     return NextResponse.json(

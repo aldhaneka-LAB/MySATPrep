@@ -11,7 +11,7 @@
     "db:generate": "drizzle-kit generate",
     "db:push": "drizzle-kit push",
     "db:studio": "drizzle-kit studio",
-    "auth:generate": "npx --yes @better-auth/cli@latest generate --config src/lib/auth.ts --output src/lib/db/auth.schema.ts -y",
+    "auth:generate": "npx --yes @better-auth/cli@latest generate --config src/lib/auth.ts --output migrations/auth.schema -y",
     "deploy": "opennextjs-cloudflare build && opennextjs-cloudflare deploy",
     "upload": "opennextjs-cloudflare build && opennextjs-cloudflare upload",
     "preview": "opennextjs-cloudflare build && opennextjs-cloudflare preview",

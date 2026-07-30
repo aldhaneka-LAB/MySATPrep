@@ -131,7 +131,7 @@ export function savePracticeStatistics(statistics: PracticeStatistics): void {
 }
 
 /**
- * Add a question statistic to the practice statistics.
+ * Add a question statistic and detailed answered question info to the practice statistics.
  * Always writes to localStorage. When `ctx` is provided and the user is
  * authenticated, the full updated statistics object is also synced to the cloud.
  */
@@ -153,11 +153,37 @@ export function addQuestionStatistic(
 
   const assessmentStats = statistics[entry.assessment];
 
-  // Add to answered questions list if not already there
+  // Add to legacy answered questions list if not already there
   if (!assessmentStats.answeredQuestions.includes(entry.questionId)) {
     assessmentStats.answeredQuestions.push(entry.questionId);
   }
 
+  // --- Update Detailed Answered Questions ---
+  const existingIndex = assessmentStats.answeredQuestionsDetailed.findIndex(
+    (q) => q.questionId === entry.questionId,
+  );
+
+  const answeredQuestion: AnsweredQuestion = {
+    questionId: entry.questionId,
+    difficulty: entry.difficulty,
+    isCorrect: entry.statistic.isCorrect,
+    timeSpent: entry.statistic.time,
+    timestamp: new Date().toISOString(),
+    plainQuestion: entry.plainQuestion,
+    selectedAnswer: entry.statistic.answer,
+    external_id: entry.external_id,
+    ibn: entry.ibn,
+  };
+
+  if (existingIndex !== -1) {
+    // Update existing entry
+    assessmentStats.answeredQuestionsDetailed[existingIndex] = answeredQuestion;
+  } else {
+    // Add new entry
+    assessmentStats.answeredQuestionsDetailed.push(answeredQuestion);
+  }
+
+  // --- Update Statistics Breakdown ---
   // Initialize primary class code if it doesn't exist
   if (!assessmentStats.statistics[entry.primaryClassCd]) {
     assessmentStats.statistics[entry.primaryClassCd] = {};
@@ -179,70 +205,6 @@ export function addQuestionStatistic(
   assessmentStats.statistics[entry.primaryClassCd][entry.skillCd][
     entry.questionId
   ] = statisticWithIds;
-
-  // Save back to localStorage
-  savePracticeStatistics(statistics);
-
-  // Sync to cloud for authenticated users
-  if (ctx) syncStatisticsToCloud(statistics, ctx);
-}
-
-/**
- * Add a detailed answered question with difficulty and metadata.
- * Always writes to localStorage. When `ctx` is provided and the user is
- * authenticated, the full updated statistics object is also synced to the cloud.
- */
-export function addAnsweredQuestion(
-  assessment: AssessmentType,
-  questionId: string,
-  difficulty: "E" | "M" | "H",
-  isCorrect: boolean,
-  timeSpent: number,
-  plainQuestion?: PlainQuestionType,
-  selectedAnswer?: string,
-  ctx?: SyncContext,
-): void {
-  console.log("Adding detailed answered question:", questionId);
-  const statistics = getPracticeStatistics();
-
-  // Initialize assessment if it doesn't exist
-  if (!statistics[assessment]) {
-    statistics[assessment] = {
-      answeredQuestions: [],
-      answeredQuestionsDetailed: [],
-      statistics: {},
-    };
-  }
-
-  const assessmentStats = statistics[assessment];
-
-  // Check if this question is already in the detailed list
-  const existingIndex = assessmentStats.answeredQuestionsDetailed.findIndex(
-    (q) => q.questionId === questionId,
-  );
-
-  const answeredQuestion: AnsweredQuestion = {
-    questionId,
-    difficulty,
-    isCorrect,
-    timeSpent,
-    timestamp: new Date().toISOString(),
-    plainQuestion,
-    selectedAnswer, // Include the selected answer
-  };
-
-  if (existingIndex !== -1) {
-    // Update existing entry
-    assessmentStats.answeredQuestionsDetailed[existingIndex] = answeredQuestion;
-  } else {
-    // Add new entry
-    assessmentStats.answeredQuestionsDetailed.push(answeredQuestion);
-  }
-
-  // Also add to legacy answered questions list if not already there
-  if (!assessmentStats.answeredQuestions.includes(questionId)) {
-    assessmentStats.answeredQuestions.push(questionId);
-  }
 
   // Save back to localStorage
   savePracticeStatistics(statistics);
@@ -434,57 +396,57 @@ export function importStatistics(jsonData: string): boolean {
  * Always writes to localStorage. When `ctx` is provided and the user is
  * authenticated, also dispatches updateSessionThunk to keep the DB in sync.
  */
-export function updateSessionXP(
-  sessionId: string,
-  xpChange: number,
-  ctx?: SyncContext,
-): void {
-  try {
-    const existingSessions = localStorage.getItem("practiceHistory");
-    const sessions: PracticeSession[] = existingSessions
-      ? JSON.parse(existingSessions)
-      : [];
+// export function updateSessionXP(
+//   sessionId: string,
+//   xpChange: number,
+//   ctx?: SyncContext,
+// ): void {
+//   try {
+//     const existingSessions = localStorage.getItem("practiceHistory");
+//     const sessions: PracticeSession[] = existingSessions
+//       ? JSON.parse(existingSessions)
+//       : [];
 
-    // Find the session and update its totalXPReceived
-    const existingIndex = sessions.findIndex(
-      (session) => session.sessionId === sessionId,
-    );
+//     // Find the session and update its totalXPReceived
+//     const existingIndex = sessions.findIndex(
+//       (session) => session.sessionId === sessionId,
+//     );
 
-    if (existingIndex !== -1) {
-      const currentXP = sessions[existingIndex].totalXPReceived || 0;
-      const newXP = currentXP + xpChange;
-      sessions[existingIndex].totalXPReceived = newXP;
-      localStorage.setItem("practiceHistory", JSON.stringify(sessions));
-      console.log(
-        `📊 Updated session ${sessionId} XP: ${currentXP} + ${xpChange} = ${newXP}`,
-      );
+//     if (existingIndex !== -1) {
+//       const currentXP = sessions[existingIndex].totalXPReceived || 0;
+//       const newXP = currentXP + xpChange;
+//       sessions[existingIndex].totalXPReceived = newXP;
+//       localStorage.setItem("practiceHistory", JSON.stringify(sessions));
+//       console.log(
+//         `📊 Updated session ${sessionId} XP: ${currentXP} + ${xpChange} = ${newXP}`,
+//       );
 
-      // Sync to cloud for authenticated users
-      if (ctx && isAuthenticated(ctx)) {
-        const updatedSession = sessions[existingIndex];
-        withRetry(
-          () =>
-            ctx.dispatch(
-              updateSessionThunk({
-                id: sessionId,
-                sessionData: {
-                  totalXPReceived: updatedSession.totalXPReceived,
-                },
-              }),
-            ) as unknown as Promise<unknown>,
-        ).catch(() => {
-          showNetworkError(
-            "Failed to sync session XP. Please check your connection.",
-          );
-        });
-      }
-    } else {
-      console.warn(`Session ${sessionId} not found in practice history`);
-    }
-  } catch (error) {
-    console.error("Error updating session XP:", error);
-  }
-}
+//       // Sync to cloud for authenticated users
+//       if (ctx && isAuthenticated(ctx)) {
+//         const updatedSession = sessions[existingIndex];
+//         withRetry(
+//           () =>
+//             ctx.dispatch(
+//               updateSessionThunk({
+//                 id: sessionId,
+//                 sessionData: {
+//                   totalXPReceived: updatedSession.totalXPReceived,
+//                 },
+//               }),
+//             ) as unknown as Promise<unknown>,
+//         ).catch(() => {
+//           showNetworkError(
+//             "Failed to sync session XP. Please check your connection.",
+//           );
+//         });
+//       }
+//     } else {
+//       console.warn(`Session ${sessionId} not found in practice history`);
+//     }
+//   } catch (error) {
+//     console.error("Error updating session XP:", error);
+//   }
+// }
 
 /**
  * Debug function to check localStorage content

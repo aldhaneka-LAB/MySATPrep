@@ -27,8 +27,7 @@ import {
 import { AssessmentType, PracticeStatistics } from "@/types/statistics";
 import {
   addQuestionStatistic,
-  addAnsweredQuestion,
-  updateSessionXP,
+  // updateSessionXP,
 } from "@/lib/practiceStatistics";
 import { SavedQuestions, SavedQuestion } from "@/types/savedQuestions";
 import { QuestionNotes, QuestionNote } from "@/types/questionNotes";
@@ -55,12 +54,10 @@ import {
 import {
   ArrowLeftIcon,
   ArrowRightIcon,
-  BookmarkIcon,
   CheckCircle,
   ChevronDown,
   ChevronUp,
   Clock,
-  GripHorizontal,
   LinkIcon,
   NotebookPen,
   PyramidIcon,
@@ -1213,6 +1210,7 @@ export default function PracticeRushMultistep({
 
   // Auto-save session data to localStorage
   const saveCurrentSession = useCallback(() => {
+    console.log("saveCurrentSession() function invocation");
     // Don't save if session is already completed (in full review mode)
     if (
       restoredSessionData &&
@@ -1306,6 +1304,26 @@ export default function PracticeRushMultistep({
     try {
       // Save current session via the sync layer (handles localStorage + API for authenticated users)
       debouncedSaveCurrentSession(currentSession, reduxDispatch, reduxState);
+
+      if (!isAuthenticated) {
+        const existingSessions = localStorage.getItem("practiceHistory");
+        const sessions: PracticeSession[] = existingSessions
+          ? JSON.parse(existingSessions)
+          : [];
+
+        const existingIndex = sessions.findIndex(
+          (session) => session.sessionId === state.sessionId,
+        );
+
+        if (existingIndex !== -1) {
+          sessions[existingIndex] = currentSession;
+        } else {
+          sessions.push(currentSession);
+        }
+
+        const recentSessions = sessions.slice(-20);
+        localStorage.setItem("practiceHistory", JSON.stringify(recentSessions));
+      }
 
       // Show saving indicator briefly
       setTimeout(() => {
@@ -1526,15 +1544,30 @@ export default function PracticeRushMultistep({
   }, [practiceSelections, restoredSessionData]);
 
   // Auto-save session every 30 seconds
+  // useEffect(() => {
+  //   const interval = setInterval(() => {
+  //     if (!isSavingRef.current) {
+  //       saveCurrentSession();
+  //     }
+  //   }, 30000); // Save every 30 seconds
+
+  //   return () => clearInterval(interval);
+  // }, [saveCurrentSession]);
+
   useEffect(() => {
-    const interval = setInterval(() => {
+    // const interval = setInterval(() => {
+    //   if (!isSavingRef.current) {
+    //     saveCurrentSession();
+    //   }
+    // }, 30000); // Save every 30 seconds
+
+    return () => {
+      console.log("SAVE CURRENT SESSIOn", isSavingRef.current);
       if (!isSavingRef.current) {
         saveCurrentSession();
       }
-    }, 30000); // Save every 30 seconds
-
-    return () => clearInterval(interval);
-  }, [saveCurrentSession]);
+    };
+  }, []);
 
   // Save session when question is answered (debounced)
   const questionAnswersCount = Object.keys(state.questionAnswers).length;
@@ -1550,16 +1583,16 @@ export default function PracticeRushMultistep({
   }, [questionAnswersCount, saveCurrentSession]);
 
   // Save session when user progresses to next question (debounced)
-  useEffect(() => {
-    if (state.currentQuestionStep > 0 && !isSavingRef.current) {
-      // Debounce to avoid too frequent saves
-      const timeoutId = setTimeout(() => {
-        saveCurrentSession();
-      }, 1000);
+  // useEffect(() => {
+  //   if (state.currentQuestionStep > 0 && !isSavingRef.current) {
+  //     // Debounce to avoid too frequent saves
+  //     const timeoutId = setTimeout(() => {
+  //       saveCurrentSession();
+  //     }, 1000);
 
-      return () => clearTimeout(timeoutId);
-    }
-  }, [state.currentQuestionStep, saveCurrentSession]);
+  //     return () => clearTimeout(timeoutId);
+  //   }
+  // }, [state.currentQuestionStep, saveCurrentSession]);
 
   // Save session before page unload
   useEffect(() => {
@@ -1637,6 +1670,29 @@ export default function PracticeRushMultistep({
               reduxDispatch,
               reduxState,
             );
+
+            if (!isAuthenticated) {
+              const existingSessions = localStorage.getItem("practiceHistory");
+              const sessions: PracticeSession[] = existingSessions
+                ? JSON.parse(existingSessions)
+                : [];
+
+              const existingIndex = sessions.findIndex(
+                (session) => session.sessionId === state.sessionId,
+              );
+
+              if (existingIndex !== -1) {
+                sessions[existingIndex] = currentSession;
+              } else {
+                sessions.push(currentSession);
+              }
+
+              const recentSessions = sessions.slice(-20);
+              localStorage.setItem(
+                "practiceHistory",
+                JSON.stringify(recentSessions),
+              );
+            }
           } catch (error) {
             console.error("Failed to save session on unload:", error);
           }
@@ -2932,12 +2988,18 @@ export default function PracticeRushMultistep({
           try {
             const assessmentType =
               practiceSelections.assessment as AssessmentType;
+
+            console.log("reduxState", reduxState);
             addQuestionStatistic(
               {
                 assessment: assessmentType,
                 primaryClassCd: currentQuestion.plainQuestion.primary_class_cd,
                 skillCd: currentQuestion.plainQuestion.skill_cd,
                 questionId: currentQuestion.plainQuestion.questionId,
+                difficulty: currentQuestion.plainQuestion.difficulty as
+                  | "E"
+                  | "M"
+                  | "H",
                 external_id:
                   currentQuestion.plainQuestion.external_id || undefined,
                 ibn: currentQuestion.plainQuestion.ibn || undefined,
@@ -2954,19 +3016,9 @@ export default function PracticeRushMultistep({
               },
               { dispatch: reduxDispatch, state: reduxState },
             );
+            // console.log("practiceSelections", practiceSelections);
 
-            // Also save detailed answered question with difficulty
-            addAnsweredQuestion(
-              assessmentType,
-              currentQuestion.plainQuestion.questionId,
-              currentQuestion.plainQuestion.difficulty as "E" | "M" | "H",
-              correct,
-              timeElapsed,
-              currentQuestion.plainQuestion, // Include plainQuestion data
-              state.selectedAnswer, // Include the selected answer
-              { dispatch: reduxDispatch, state: reduxState },
-            );
-
+            // console.log("assessmentType", assessmentType);
             // Update user profile and XP based on answer correctness
             const scoreBandRange =
               currentQuestion.plainQuestion.score_band_range_cd;
@@ -2980,15 +3032,15 @@ export default function PracticeRushMultistep({
                 scoreBandRange,
               );
 
-              // Calculate session XP change
-              sessionXPChange = scoreBandRange * 10;
+              // // Calculate session XP change
+              // sessionXPChange = scoreBandRange * 10;
 
-              // Show XP gain notification
-              const xpGain = scoreBandRange * 10;
-              toast.success(`Correct! +${xpGain} XP! 🎯`, {
-                description: `Total XP: ${updatedProfile.totalXP} | Level: ${updatedProfile.level}`,
-                duration: 3000,
-              });
+              // // Show XP gain notification
+              // const xpGain = scoreBandRange * 10;
+              // toast.success(`Correct! +${xpGain} XP! 🎯`, {
+              //   description: `Total XP: ${updatedProfile.totalXP} | Level: ${updatedProfile.level}`,
+              //   duration: 3000,
+              // });
             } else {
               // Reduce XP for incorrect answer
               updatedProfile = reduceXPForIncorrectAnswer(
@@ -2996,25 +3048,25 @@ export default function PracticeRushMultistep({
                 scoreBandRange,
               );
 
-              // Calculate session XP change (negative)
-              sessionXPChange = -Math.floor((scoreBandRange * 10) / 2);
+              // // Calculate session XP change (negative)
+              // sessionXPChange = -Math.floor((scoreBandRange * 10) / 2);
 
-              // Show XP loss notification
-              const xpLoss = Math.floor((scoreBandRange * 10) / 2);
-              toast.error(`Incorrect. -${xpLoss} XP 💔`, {
-                description: `Total XP: ${updatedProfile.totalXP} | Level: ${updatedProfile.level}`,
-                duration: 3000,
-              });
+              // // Show XP loss notification
+              // const xpLoss = Math.floor((scoreBandRange * 10) / 2);
+              // toast.error(`Incorrect. -${xpLoss} XP 💔`, {
+              //   description: `Total XP: ${updatedProfile.totalXP} | Level: ${updatedProfile.level}`,
+              //   duration: 3000,
+              // });
             }
 
             // Update session XP tracking
             dispatch({ type: "ADD_SESSION_XP", payload: sessionXPChange });
 
-            // Update practice history immediately with new XP
-            updateSessionXP(state.sessionId, sessionXPChange, {
-              dispatch: reduxDispatch,
-              state: reduxState,
-            });
+            // // Update practice history immediately with new XP
+            // updateSessionXP(state.sessionId, sessionXPChange, {
+            //   dispatch: reduxDispatch,
+            //   state: reduxState,
+            // });
 
             console.log("📊 Updated user profile:", {
               totalXP: updatedProfile.totalXP,
@@ -3026,18 +3078,18 @@ export default function PracticeRushMultistep({
             });
 
             // Sync profile and statistics to DB for authenticated users
-            syncSaveUserProfile(updatedProfile, reduxDispatch, reduxState);
-            const currentStats = isAuthenticated
-              ? (reduxStatistics as PracticeStatistics)
-              : (() => {
-                  try {
-                    const raw = localStorage.getItem("practiceStatistics");
-                    return raw ? JSON.parse(raw) : {};
-                  } catch {
-                    return {};
-                  }
-                })();
-            saveUserStatistics(currentStats, reduxDispatch, reduxState);
+            // syncSaveUserProfile(updatedProfile, reduxDispatch, reduxState);
+            // const currentStats = isAuthenticated
+            //   ? (reduxStatistics as PracticeStatistics)
+            //   : (() => {
+            //       try {
+            //         const raw = localStorage.getItem("practiceStatistics");
+            //         return raw ? JSON.parse(raw) : {};
+            //       } catch {
+            //         return {};
+            //       }
+            //     })();
+            // saveUserStatistics(currentStats, reduxDispatch, reduxState);
 
             // currentQuestion.plainQuestion.score_band_range_cd
           } catch (error) {

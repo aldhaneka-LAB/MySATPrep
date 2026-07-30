@@ -13,6 +13,9 @@
 import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import { logError } from "@/lib/utils/errorLogger";
+
+export const dynamic = 'force-dynamic';
+
 import {
   userProfileCache,
   statisticsCache,

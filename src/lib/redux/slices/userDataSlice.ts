@@ -125,6 +125,7 @@ export const updateUserStatistics = createAsyncThunk<
 >(
   "userData/updateUserStatistics",
   async (statisticsData, { rejectWithValue }) => {
+    console.log("UPDATING STATISTICS! ");
     try {
       // The API expects one request per assessment with the shape:
       // { assessment, answeredQuestions, answeredQuestionsDetailed, statistics }
@@ -174,6 +175,7 @@ export const updateUserStatistics = createAsyncThunk<
 
         // Merge the returned assessment data back into the result
         const returned = json.data?.statistics;
+        console.log("returned ", returned);
         if (returned) {
           Object.assign(merged, returned);
         }
@@ -192,60 +194,63 @@ export const updateUserStatistics = createAsyncThunk<
  * Creates a new practice session in the backend.
  * Validates: Requirements 4.8, 8.3, 13.3
  */
-export const createSession = createAsyncThunk<PracticeSession, PracticeSession>(
-  "userData/createSession",
-  async (sessionData, { rejectWithValue }) => {
-    try {
-      // Mark this session as the current active one.
-      // The DB layer (createPracticeSession) will clear the flag on any
-      // pre-existing current session for this user before inserting.
-      const payload: PracticeSession = { ...sessionData, currentSession: true };
+export const createSession = createAsyncThunk<
+  { session: PracticeSession },
+  PracticeSession
+>("userData/createSession", async (sessionData, { rejectWithValue }) => {
+  try {
+    // Mark this session as the current active one.
+    // The DB layer (createPracticeSession) will clear the flag on any
+    // pre-existing current session for this user before inserting.
+    const payload: PracticeSession = { ...sessionData, currentSession: true };
 
-      const response = await fetch("/api/user/sessions", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        credentials: "include",
-        body: JSON.stringify(payload),
-      });
+    console.log("Creating session");
 
-      if (response.status === 401) {
-        throw new Error("Unauthorized");
-      }
+    const response = await fetch("/api/user/sessions", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      credentials: "include",
+      body: JSON.stringify(payload),
+    });
 
-      if (!response.ok) {
-        const json = (await response.json().catch(() => ({}))) as {
-          error?: string;
-        };
-        throw new Error(
-          json.error ?? `Failed to create session: ${response.status}`,
-        );
-      }
+    if (response.status === 401) {
+      throw new Error("Unauthorized");
+    }
 
-      const json = (await response.json()) as {
-        data?: unknown;
-        summary?: unknown;
+    if (!response.ok) {
+      const json = (await response.json().catch(() => ({}))) as {
         error?: string;
       };
-      return json.data as PracticeSession;
-    } catch (error) {
-      return rejectWithValue(
-        error instanceof Error ? error.message : "Failed to create session",
+      throw new Error(
+        json.error ?? `Failed to create session: ${response.status}`,
       );
     }
-  },
-);
+
+    const json = (await response.json()) as {
+      data?: { session: PracticeSession };
+      summary?: unknown;
+      error?: string;
+    };
+    return json.data as { session: PracticeSession };
+  } catch (error) {
+    return rejectWithValue(
+      error instanceof Error ? error.message : "Failed to create session",
+    );
+  }
+});
 
 /**
  * Updates an existing practice session in the backend.
  * Validates: Requirements 4.8, 8.4, 13.3
  */
 export const updateSessionThunk = createAsyncThunk<
-  PracticeSession,
+  { session: PracticeSession },
   { id: string; sessionData: Partial<PracticeSession> }
 >(
   "userData/updateSession",
   async ({ id, sessionData }, { rejectWithValue }) => {
     try {
+      console.log("UPDATE SESSIOn");
       const response = await fetch(`/api/user/sessions/${id}`, {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
@@ -271,7 +276,7 @@ export const updateSessionThunk = createAsyncThunk<
         summary?: unknown;
         error?: string;
       };
-      return json.data as PracticeSession;
+      return json.data as { session: PracticeSession };
     } catch (error) {
       return rejectWithValue(
         error instanceof Error ? error.message : "Failed to update session",
@@ -789,6 +794,7 @@ export const syncLocalStorageData = createAsyncThunk<
       const res = await fetch("/api/user/complete-data", {
         method: "GET",
         credentials: "include",
+        cache: "no-store",
       });
       if (res.ok) {
         const json = (await res.json()) as {
@@ -999,6 +1005,8 @@ export const syncLocalStorageData = createAsyncThunk<
       return result;
     })();
 
+    console.log("mergedStatistics", mergedStatistics);
+
     // Sessions: union by sessionId
     const mergedSessions = (() => {
       const sessionMap = new Map();
@@ -1009,6 +1017,8 @@ export const syncLocalStorageData = createAsyncThunk<
       }
       return Array.from(sessionMap.values());
     })();
+
+    console.log("mergedSessions", mergedSessions);
 
     // Bookmarks: union by questionId
     const mergedBookmarks = (() => {
@@ -1318,6 +1328,7 @@ export const fetchSessions = createAsyncThunk<PracticeSession[], void>(
   "userData/fetchSessions",
   async (_, { rejectWithValue }) => {
     try {
+      console.log("FETCH SESSION NOW!");
       const response = await fetch("/api/user/sessions", {
         method: "GET",
         credentials: "include",
@@ -1606,19 +1617,6 @@ const userDataSlice = createSlice({
     // Set practice sessions
     setSessions: (state, action: PayloadAction<PracticeSession[]>) => {
       state.sessions = action.payload;
-      state.loading.sessions = false;
-    },
-
-    // Add a new practice session.
-    // If the incoming session has currentSession=true, clear the flag on all
-    // other sessions first to keep the at-most-one invariant in the local store.
-    addSession: (state, action: PayloadAction<PracticeSession>) => {
-      if (action.payload.currentSession) {
-        state.sessions.forEach((s) => {
-          s.currentSession = false;
-        });
-      }
-      state.sessions.unshift(action.payload); // Add to beginning
       state.loading.sessions = false;
     },
 
@@ -1939,12 +1937,25 @@ const userDataSlice = createSlice({
       .addCase(createSession.fulfilled, (state, action) => {
         // The new session is the active current one — clear the flag on all
         // existing sessions so the at-most-one invariant holds in the local store.
-        if (action.payload.currentSession) {
+        if (action.payload.session.currentSession) {
           state.sessions.forEach((s) => {
             s.currentSession = false;
           });
         }
-        state.sessions.unshift(action.payload);
+
+        console.log("action.payload.session", action.payload.session);
+        // Avoid duplicate if optimistically added
+        const existsIndex = state.sessions.findIndex(
+          (s) => s.sessionId === action.payload.session.sessionId,
+        );
+
+        if (existsIndex !== -1) {
+          state.sessions[existsIndex] = action.payload.session;
+        } else {
+          console.log("UNSHIFT NON EXISTING SESSION !", action.payload);
+          state.sessions.unshift({ ...action.payload.session });
+        }
+
         state.loading.sessions = false;
         state.error = null;
       })
@@ -1960,12 +1971,14 @@ const userDataSlice = createSlice({
         state.error = null;
       })
       .addCase(updateSessionThunk.fulfilled, (state, action) => {
-        const index = state.sessions.findIndex(
-          (s) => s.sessionId === action.payload.sessionId,
+        console.log(
+          "updateSessionThunk.fulfilled action payload",
+          action.payload,
         );
-        if (index !== -1) {
-          state.sessions[index] = action.payload;
-        }
+        state.sessions = [
+          { ...action.payload.session },
+          ...state.sessions.slice(1),
+        ];
         state.loading.sessions = false;
         state.error = null;
       })
@@ -2282,7 +2295,6 @@ export const {
   setStatistics,
   updateStatistics,
   setSessions,
-  addSession,
   updateSession,
   removeSession,
   setBookmarks,

@@ -43,6 +43,8 @@ import { DraggableDesmosPopup } from "./popups/desmos-popup";
 import { DraggableNotesPopup } from "./popups/notes-popup";
 import { getSubjectByPrimaryClassCd } from "@/static-data/domains";
 import { SaveButton } from "./ui/save-button";
+import { addQuestionStatistic } from "@/lib/practiceStatistics";
+import { store } from "@/lib/redux/store";
 import {
   usePracticeStatisticsState,
   useResolvedBookmarks,
@@ -52,9 +54,10 @@ import Fraction from "fraction.js";
 
 const checkAnswerValidity = (
   userAnswer: string | null | undefined,
-  correctAnswers: (string | number)[] | undefined | null
+  correctAnswers: (string | number)[] | undefined | null,
 ): boolean => {
-  if (!userAnswer || !correctAnswers || correctAnswers.length === 0) return false;
+  if (!userAnswer || !correctAnswers || correctAnswers.length === 0)
+    return false;
 
   if (Number(userAnswer)) {
     return correctAnswers
@@ -471,7 +474,10 @@ const QuestionProblemCard = React.memo(function QuestionProblemCard({
   // Submit answer and save statistics - memoized to prevent recreation on every render
   const submitAnswer = useCallback(
     (answer: string) => {
-      const isCorrect = checkAnswerValidity(answer, question.problem.correct_answer);
+      const isCorrect = checkAnswerValidity(
+        answer,
+        question.problem.correct_answer,
+      );
 
       const timeElapsed = Date.now() - questionStartTime;
 
@@ -510,56 +516,29 @@ const QuestionProblemCard = React.memo(function QuestionProblemCard({
           updatedHistory: updatedHistory[questionId],
         });
       } else {
-        const parsedStats: PracticeStatistics = { ...practiceStatistics };
-
-        // Save to practiceStatistics when answer visibility is shown
-        const updatedStats = { ...parsedStats };
-
-        // Initialize assessment stats if they don't exist
-        if (!updatedStats[assessment]) {
-          updatedStats[assessment] = {
-            answeredQuestions: [],
-            answeredQuestionsDetailed: [],
-            statistics: {},
-          };
-        }
-
-        const assessmentStats = { ...updatedStats[assessment] };
-
-        // Add to answered questions if not already there
-        if (!assessmentStats.answeredQuestions?.includes(questionId)) {
-          assessmentStats.answeredQuestions =
-            assessmentStats.answeredQuestions || [];
-          assessmentStats.answeredQuestions.push(questionId);
-        }
-
-        // Add detailed answer information
-        assessmentStats.answeredQuestionsDetailed =
-          assessmentStats.answeredQuestionsDetailed || [];
-
-        // Remove existing entry if it exists (for re-answering)
-        assessmentStats.answeredQuestionsDetailed =
-          assessmentStats.answeredQuestionsDetailed.filter(
-            (q) => q.questionId !== questionId,
-          );
-
-        // Add new entry
-        assessmentStats.answeredQuestionsDetailed.push({
-          questionId,
-          difficulty: question.question.difficulty || "M", // Default to Medium if not specified
-          isCorrect,
-          timeSpent: timeElapsed,
-          timestamp: new Date().toISOString(),
-          selectedAnswer: answer, // Store user's selected answer
-          plainQuestion: question.question,
-        });
-
-        updatedStats[assessment] = assessmentStats;
-
-        setPracticeStatistics(updatedStats);
+        // Handle saving with new generalized function from practiceStatistics
+        addQuestionStatistic(
+          {
+            questionId,
+            assessment: assessment as any,
+            difficulty:
+              (question.question.difficulty as "E" | "M" | "H") || "M",
+            primaryClassCd: question.question.primary_class_cd as any,
+            skillCd: question.question.skill_cd as any,
+            plainQuestion: question.question,
+            statistic: {
+              answer,
+              isCorrect,
+              time: timeElapsed,
+            },
+            external_id: question.question.external_id || undefined,
+            ibn: question.question.ibn || undefined,
+          },
+          { dispatch: store.dispatch, state: store.getState() },
+        );
 
         // Debug logging
-        console.log("Question answered and saved to practiceStatistics:", {
+        console.log("Question answered and saved using addQuestionStatistic:", {
           questionId,
           selectedAnswer: answer,
           isCorrect,
@@ -567,7 +546,6 @@ const QuestionProblemCard = React.memo(function QuestionProblemCard({
           questionType: question.problem.answerOptions
             ? "multiple-choice"
             : "text-input",
-          updatedStats: updatedStats[assessment]?.answeredQuestionsDetailed,
         });
       }
 
@@ -850,7 +828,10 @@ const QuestionProblemCard = React.memo(function QuestionProblemCard({
               <RadioGroup className="flex flex-col gap-3" disabled>
                 {Object.entries(question.problem.answerOptions).map(
                   ([optionKey, optionText], index) => {
-                    const isCorrect = checkAnswerValidity(optionKey, question.problem.correct_answer);
+                    const isCorrect = checkAnswerValidity(
+                      optionKey,
+                      question.problem.correct_answer,
+                    );
 
                     // For current session answers
                     const isSelected = selectedAnswer === optionKey;

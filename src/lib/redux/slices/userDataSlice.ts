@@ -794,6 +794,7 @@ export const syncLocalStorageData = createAsyncThunk<
       const res = await fetch("/api/user/complete-data", {
         method: "GET",
         credentials: "include",
+        cache: "no-store",
       });
       if (res.ok) {
         const json = (await res.json()) as {

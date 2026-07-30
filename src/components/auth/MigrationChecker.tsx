@@ -408,6 +408,7 @@ export function MigrationChecker() {
         const response = await fetch("/api/user/complete-data", {
           method: "GET",
           credentials: "include",
+          cache: "no-store",
         });
 
         if (!response.ok) {

@@ -300,6 +300,8 @@ function localStorageDiffersFromDb(dbData: {
     const rawStats = localStorage.getItem("practiceStatistics");
     if (rawStats) {
       const localStats = JSON.parse(rawStats);
+      console.log("rawStats", localStats);
+
       if (typeof localStats === "object" && localStats !== null) {
         const dbStats =
           typeof dbData.statistics === "object" && dbData.statistics !== null
@@ -311,6 +313,8 @@ function localStorageDiffersFromDb(dbData: {
                 }
               >)
             : {};
+
+        console.log("dbStats", dbStats);
 
         const statsDetails: NonNullable<LocalDbDiff["details"]["statistics"]> =
           [];
@@ -324,33 +328,20 @@ function localStorageDiffersFromDb(dbData: {
               }
             ).answeredQuestions ?? [];
 
-          const localDetailed: unknown[] =
-            (
-              data as {
-                answeredQuestionsDetailed?: unknown[];
-              }
-            ).answeredQuestionsDetailed ?? [];
-
           const dbAnswered: string[] =
             dbStats[assessment]?.answeredQuestions ?? [];
 
-          const dbDetailed: unknown[] =
-            dbStats[assessment]?.answeredQuestionsDetailed ?? [];
-
-          // Flag if either the flat ID list OR the detailed list has more
-          // entries locally than in the DB. Use the larger of the two counts
-          // as the representative local count so the UI message is accurate.
-          const localCount = Math.max(
-            localAnswered.length,
-            localDetailed.length,
+          // Find question IDs present in localStorage but missing from DB
+          const dbAnsweredSet = new Set(dbAnswered);
+          const localOnlyAnswered = localAnswered.filter(
+            (id) => !dbAnsweredSet.has(id),
           );
-          const dbCount = Math.max(dbAnswered.length, dbDetailed.length);
 
-          if (localCount > dbCount) {
+          if (localOnlyAnswered.length > 0) {
             statsDetails.push({
               assessment,
-              localCount,
-              dbCount,
+              localCount: localAnswered.length,
+              dbCount: dbAnswered.length,
             });
           }
         }

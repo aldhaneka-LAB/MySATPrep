@@ -27,7 +27,6 @@ import {
 import { AssessmentType, PracticeStatistics } from "@/types/statistics";
 import {
   addQuestionStatistic,
-  addAnsweredQuestion,
   // updateSessionXP,
 } from "@/lib/practiceStatistics";
 import { SavedQuestions, SavedQuestion } from "@/types/savedQuestions";
@@ -1545,15 +1544,30 @@ export default function PracticeRushMultistep({
   }, [practiceSelections, restoredSessionData]);
 
   // Auto-save session every 30 seconds
+  // useEffect(() => {
+  //   const interval = setInterval(() => {
+  //     if (!isSavingRef.current) {
+  //       saveCurrentSession();
+  //     }
+  //   }, 30000); // Save every 30 seconds
+
+  //   return () => clearInterval(interval);
+  // }, [saveCurrentSession]);
+
   useEffect(() => {
-    const interval = setInterval(() => {
+    // const interval = setInterval(() => {
+    //   if (!isSavingRef.current) {
+    //     saveCurrentSession();
+    //   }
+    // }, 30000); // Save every 30 seconds
+
+    return () => {
+      console.log("SAVE CURRENT SESSIOn", isSavingRef.current);
       if (!isSavingRef.current) {
         saveCurrentSession();
       }
-    }, 30000); // Save every 30 seconds
-
-    return () => clearInterval(interval);
-  }, [saveCurrentSession]);
+    };
+  }, []);
 
   // Save session when question is answered (debounced)
   const questionAnswersCount = Object.keys(state.questionAnswers).length;
@@ -2982,6 +2996,10 @@ export default function PracticeRushMultistep({
                 primaryClassCd: currentQuestion.plainQuestion.primary_class_cd,
                 skillCd: currentQuestion.plainQuestion.skill_cd,
                 questionId: currentQuestion.plainQuestion.questionId,
+                difficulty: currentQuestion.plainQuestion.difficulty as
+                  | "E"
+                  | "M"
+                  | "H",
                 external_id:
                   currentQuestion.plainQuestion.external_id || undefined,
                 ibn: currentQuestion.plainQuestion.ibn || undefined,
@@ -2998,19 +3016,6 @@ export default function PracticeRushMultistep({
               },
               { dispatch: reduxDispatch, state: reduxState },
             );
-
-            // Also save detailed answered question with difficulty
-            addAnsweredQuestion(
-              assessmentType,
-              currentQuestion.plainQuestion.questionId,
-              currentQuestion.plainQuestion.difficulty as "E" | "M" | "H",
-              correct,
-              timeElapsed,
-              currentQuestion.plainQuestion, // Include plainQuestion data
-              state.selectedAnswer, // Include the selected answer
-              { dispatch: reduxDispatch, state: reduxState },
-            );
-
             // console.log("practiceSelections", practiceSelections);
 
             // console.log("assessmentType", assessmentType);

@@ -175,6 +175,7 @@ export const updateUserStatistics = createAsyncThunk<
 
         // Merge the returned assessment data back into the result
         const returned = json.data?.statistics;
+        console.log("returned ", returned);
         if (returned) {
           Object.assign(merged, returned);
         }
@@ -243,7 +244,7 @@ export const createSession = createAsyncThunk<
  * Validates: Requirements 4.8, 8.4, 13.3
  */
 export const updateSessionThunk = createAsyncThunk<
-  PracticeSession,
+  { session: PracticeSession },
   { id: string; sessionData: Partial<PracticeSession> }
 >(
   "userData/updateSession",
@@ -275,7 +276,7 @@ export const updateSessionThunk = createAsyncThunk<
         summary?: unknown;
         error?: string;
       };
-      return json.data as PracticeSession;
+      return json.data as { session: PracticeSession };
     } catch (error) {
       return rejectWithValue(
         error instanceof Error ? error.message : "Failed to update session",
@@ -1965,12 +1966,14 @@ const userDataSlice = createSlice({
         state.error = null;
       })
       .addCase(updateSessionThunk.fulfilled, (state, action) => {
-        const index = state.sessions.findIndex(
-          (s) => s.sessionId === action.payload.sessionId,
+        console.log(
+          "updateSessionThunk.fulfilled action payload",
+          action.payload,
         );
-        if (index !== -1) {
-          state.sessions[index] = action.payload;
-        }
+        state.sessions = [
+          { ...action.payload.session },
+          ...state.sessions.slice(1),
+        ];
         state.loading.sessions = false;
         state.error = null;
       })

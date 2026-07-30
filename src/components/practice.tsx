@@ -225,6 +225,8 @@ function Practice() {
   const [reviewSessionData, setReviewSessionData] =
     useState<PracticeSession | null>(null);
 
+  const processedSessionParamRef = useRef<string | null>(null);
+
   // Check for session continuation parameter first.
   // For authenticated users, wait until the full prefetch (sessions + notes +
   // bookmarks) is complete so that reduxSessions is populated before we search.
@@ -232,7 +234,10 @@ function Practice() {
     const sessionParam = searchParams.get("session");
 
     // No session param — nothing to do
-    if (!sessionParam) return;
+    if (!sessionParam) {
+      processedSessionParamRef.current = null;
+      return;
+    }
 
     // Always wait for checkSession to resolve first. Without this, on a direct
     // URL visit the effect fires with isAuthenticated=false (before the session
@@ -245,6 +250,10 @@ function Practice() {
     // prefetchComplete only flips true after those finish, so reduxSessions is
     // guaranteed to be populated by the time we search it.
     if (isAuthenticated && !prefetchComplete) return;
+
+    // Prevent duplicate processing of the same session parameter
+    if (processedSessionParamRef.current === sessionParam) return;
+    processedSessionParamRef.current = sessionParam;
 
     if (sessionParam === "continue") {
       console.log(
@@ -588,8 +597,6 @@ function Practice() {
         setOnboardingComplete(true);
 
         toast.success("Session Loaded for Review", {
-          description:
-            "This session is in review mode. You can see questions and answers but cannot make changes.",
           duration: 5000,
         });
       } catch (error) {

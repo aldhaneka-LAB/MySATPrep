@@ -442,6 +442,7 @@ export async function getCurrentSession(
      FROM practice_sessions
      WHERE user_id = $1
        AND current_session = TRUE
+       AND status = 'in_progress'
      LIMIT 1`,
     [userId],
   );

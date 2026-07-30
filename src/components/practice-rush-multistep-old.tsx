@@ -28,7 +28,7 @@ import { AssessmentType, PracticeStatistics } from "@/types/statistics";
 import {
   addQuestionStatistic,
   addAnsweredQuestion,
-  // updateSessionXP,
+  updateSessionXP,
 } from "@/lib/practiceStatistics";
 import { SavedQuestions, SavedQuestion } from "@/types/savedQuestions";
 import { QuestionNotes, QuestionNote } from "@/types/questionNotes";
@@ -55,10 +55,12 @@ import {
 import {
   ArrowLeftIcon,
   ArrowRightIcon,
+  BookmarkIcon,
   CheckCircle,
   ChevronDown,
   ChevronUp,
   Clock,
+  GripHorizontal,
   LinkIcon,
   NotebookPen,
   PyramidIcon,
@@ -73,46 +75,9 @@ import { DraggableReferencePopup } from "./popups/reference-popup";
 import { DraggableNotesPopup } from "./popups/notes-popup";
 import { SaveButton } from "./ui/save-button";
 import { playSound } from "@/lib/playSound";
-import { useResolvedBookmarks } from "@/hooks/use-resolved-user-data";
+import { useLocalStorage } from "@/lib/useLocalStorage";
 import { useRouter } from "next/navigation";
 import { LookupRequest } from "@/types";
-import { useAppDispatch, useAppSelector } from "@/lib/redux/hooks";
-import {
-  saveUserProfile as syncSaveUserProfile,
-  saveUserStatistics,
-  savePracticeSession,
-  updatePracticeSession,
-  debouncedSavePreferences,
-  debouncedSaveCurrentSession,
-  removeCurrentSession,
-  debouncedSaveNotes,
-} from "@/lib/utils/dataSync";
-import {
-  selectIsAuthenticated,
-  selectUserStatistics,
-  selectUserSessions,
-  selectUiFlag,
-  selectUserPreferences,
-  selectQuestionNotes,
-} from "@/lib/redux/selectors";
-import { setUiFlag, mergeNotes } from "@/lib/redux/slices/userDataSlice";
-import Fraction from "fraction.js";
-
-const checkAnswerValidity = (
-  userAnswer: string | null | undefined,
-  correctAnswers: string[] | undefined | null,
-): boolean => {
-  if (!userAnswer || !correctAnswers || correctAnswers.length === 0)
-    return false;
-
-  if (Number(userAnswer)) {
-    return correctAnswers
-      .map((e) => Number(new Fraction(e)) || e)
-      .includes(Number(new Fraction(userAnswer)) || userAnswer);
-  }
-
-  return correctAnswers.map((a) => a.trim()).includes(userAnswer.trim());
-};
 
 // Duolingo-styled Loading Spinner Component
 interface DuolingoLoadingSpinnerProps {
@@ -207,10 +172,10 @@ function DuolingoTimer({
 
   const getTimerColor = (ms: number) => {
     const totalSeconds = Math.floor(ms / 1000);
-    if (totalSeconds < 30) return "text-green-600 dark:text-green-400";
-    if (totalSeconds < 60) return "text-yellow-600 dark:text-yellow-400";
-    if (totalSeconds < 120) return "text-orange-600 dark:text-orange-400";
-    return "text-red-600 dark:text-red-400";
+    if (totalSeconds < 30) return "text-green-600";
+    if (totalSeconds < 60) return "text-yellow-600";
+    if (totalSeconds < 120) return "text-orange-600";
+    return "text-red-600";
   };
 
   return (
@@ -218,24 +183,118 @@ function DuolingoTimer({
       <div
         className={`${
           isVisible ? "block" : "hidden"
-        } flex items-center gap-2 bg-white dark:bg-neutral-800 border-2 border-gray-300 dark:border-neutral-600 rounded-2xl px-4 py-2 shadow-sm`}
+        } flex items-center gap-2 bg-white border-2 border-gray-300 rounded-2xl px-4 py-2 shadow-sm`}
       >
         <Clock className={`h-5 w-5 ${getTimerColor(displayTime)}`} />
         <span className={`font-bold text-lg ${getTimerColor(displayTime)}`}>
           {formatTime(displayTime)}
         </span>
         {fixedTime !== undefined && (
-          <span className="text-xs text-gray-500 dark:text-gray-400 ml-1">
-            (completed)
-          </span>
+          <span className="text-xs text-gray-500 ml-1">(completed)</span>
         )}
       </div>
       <button
         onClick={onToggleVisibility}
-        className=" h-12 text-xs text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 underline cursor-pointer transition-colors duration-200"
+        className=" h-12 text-xs text-gray-500 hover:text-gray-700 underline cursor-pointer transition-colors duration-200"
       >
         {isVisible ? "Hide Timer" : "Show Timer"}
       </button>
+    </div>
+  );
+}
+
+// Success Feedback Component
+interface SuccessFeedbackProps {
+  isVisible: boolean;
+  onContinue: () => void;
+}
+
+function SuccessFeedback({ isVisible, onContinue }: SuccessFeedbackProps) {
+  const [dontShowAgain, setDontShowAgain] = React.useState(false);
+  const [hideSuccessFeedback, setHideSuccessFeedback] = React.useState(false);
+
+  // Load localStorage preference on component mount
+  React.useEffect(() => {
+    try {
+      const savedPreference = localStorage.getItem("hideSuccessFeedback");
+      setHideSuccessFeedback(savedPreference === "true");
+    } catch (error) {
+      console.error("Failed to load preference:", error);
+    }
+  }, []);
+
+  // Auto-continue if user has opted out
+  // React.useEffect(() => {
+  //   if (isVisible && hideSuccessFeedback) {
+  //     const timeoutId = setTimeout(() => onContinue(), 1000);
+  //     return () => clearTimeout(timeoutId);
+  //   }
+  // }, [isVisible, hideSuccessFeedback, onContinue]);
+
+  const randomMessage = useMemo(() => {
+    return CONGRATULATORY_MESSAGES[
+      Math.floor(Math.random() * CONGRATULATORY_MESSAGES.length)
+    ];
+  }, []);
+
+  const handleContinue = () => {
+    if (dontShowAgain) {
+      try {
+        localStorage.setItem("hideSuccessFeedback", "true");
+        setHideSuccessFeedback(true);
+      } catch (error) {
+        console.error("Failed to save preference:", error);
+      }
+    }
+    onContinue();
+  };
+
+  if (!isVisible || hideSuccessFeedback) return null;
+
+  return (
+    <div className="fixed inset-0 flex items-center justify-center z-50 bg-black/20">
+      <div className="bg-green-100 border-4 border-green-200 rounded-3xl p-8 max-w-md w-full mx-4 shadow-2xl">
+        <div className="text-center">
+          <div className="flex items-center justify-center gap-3 mb-6">
+            <CheckCircle className="h-8 w-8 text-green-600" />
+            <h2 className="text-3xl font-bold text-green-800">
+              {randomMessage}
+            </h2>
+          </div>
+
+          {/* Checkbox for "Don't show again" */}
+          <div className="flex items-center justify-center gap-3 mb-4">
+            <Checkbox
+              id="dontShowAgain"
+              checked={dontShowAgain}
+              onCheckedChange={(checked: boolean) => {
+                const isChecked = checked === true;
+                setDontShowAgain(isChecked);
+                // Play appropriate checkbox sound
+                if (isChecked) {
+                  playSound("tap-checkbox-checked.wav");
+                } else {
+                  playSound("tap-checkbox-unchecked.wav");
+                }
+              }}
+              className="border-green-300 data-[state=checked]:bg-green-600 data-[state=checked]:border-green-600"
+            />
+            <label
+              htmlFor="dontShowAgain"
+              className="text-sm text-green-700 cursor-pointer select-none"
+            >
+              Don&apos;t show this again
+            </label>
+          </div>
+
+          <button
+            onClick={handleContinue}
+            className="cursor-pointer w-full bg-green-600 hover:bg-green-700 text-white font-bold text-xl py-4 px-8 rounded-2xl border-b-4 border-green-800 hover:border-green-900 shadow-lg hover:shadow-xl transform transition-all duration-200 active:translate-y-0.5 active:border-b-2"
+          >
+            CONTINUE
+          </button>
+        </div>
+      </div>
     </div>
   );
 }
@@ -273,16 +332,14 @@ function ExitConfirmation({
   if (!isVisible) return null;
 
   return (
-    <div className="fixed inset-0 flex items-center justify-center z-[200] bg-black/20 dark:bg-black/40">
-      <div className="bg-red-50 dark:bg-red-950 border-4 border-red-200 dark:border-red-800 rounded-3xl p-8 max-w-md w-full mx-4 shadow-2xl">
+    <div className="fixed inset-0 flex items-center justify-center z-50 bg-black/20">
+      <div className="bg-red-50 border-4 border-red-200 rounded-3xl p-8 max-w-md w-full mx-4 shadow-2xl">
         <div className="text-center">
           <div className="flex items-center justify-center gap-3 mb-6">
-            <X className="h-8 w-8 text-red-600 dark:text-red-400" />
-            <h2 className="text-3xl font-bold text-red-800 dark:text-red-200">
-              Exit Practice?
-            </h2>
+            <X className="h-8 w-8 text-red-600" />
+            <h2 className="text-3xl font-bold text-red-800">Exit Practice?</h2>
           </div>
-          <p className="text-lg text-red-700 dark:text-red-300 mb-8">
+          <p className="text-lg text-red-700 mb-8">
             Your progress will be saved, but you&apos;ll lose your current
             streak. Are you sure you want to exit?
           </p>
@@ -341,19 +398,19 @@ function FinishConfirmation({
   if (!isVisible) return null;
 
   return (
-    <div className="fixed inset-0 flex items-center justify-center z-[200] bg-black/20 dark:bg-black/40">
-      <div className="bg-green-50 dark:bg-green-950 border-4 border-green-200 dark:border-green-800 rounded-3xl p-8 max-w-md w-full mx-4 shadow-2xl">
+    <div className="fixed inset-0 flex items-center justify-center z-50 bg-black/20">
+      <div className="bg-green-50 border-4 border-green-200 rounded-3xl p-8 max-w-md w-full mx-4 shadow-2xl">
         <div className="text-center">
           <div className="flex items-center justify-center gap-3 mb-6">
-            <CheckCircle className="h-8 w-8 text-green-600 dark:text-green-400" />
-            <h2 className="text-3xl font-bold text-green-800 dark:text-green-200">
+            <CheckCircle className="h-8 w-8 text-green-600" />
+            <h2 className="text-3xl font-bold text-green-800">
               Finish Practice?
             </h2>
           </div>
-          <p className="text-lg text-green-700 dark:text-green-300 mb-4">
+          <p className="text-lg text-green-700 mb-4">
             You&apos;ve answered {questionsAnswered} questions so far.
           </p>
-          <p className="text-lg text-green-700 dark:text-green-300 mb-8">
+          <p className="text-lg text-green-700 mb-8">
             Are you ready to finish this practice session and see your results?
           </p>
           <div className="flex gap-4">
@@ -451,16 +508,16 @@ function ShareModal({
   if (!isVisible) return null;
 
   return (
-    <div className="fixed inset-0 flex items-center justify-center z-[200] bg-black/20 dark:bg-black/40">
-      <div className="bg-blue-50 dark:bg-blue-950 border-4 border-blue-200 dark:border-blue-800 rounded-3xl p-8 max-w-lg w-full mx-4 shadow-2xl">
+    <div className="fixed inset-0 flex items-center justify-center z-50 bg-black/20">
+      <div className="bg-blue-50 border-4 border-blue-200 rounded-3xl p-8 max-w-lg w-full mx-4 shadow-2xl">
         <div className="text-center">
           <div className="flex items-center justify-center gap-3 mb-6">
-            <SendIcon className="h-8 w-8 text-blue-600 dark:text-blue-400" />
-            <h2 className="text-3xl font-bold text-blue-800 dark:text-blue-200">
+            <SendIcon className="h-8 w-8 text-blue-600" />
+            <h2 className="text-3xl font-bold text-blue-800">
               Share Practice Session
             </h2>
           </div>
-          <p className="text-lg text-blue-700 dark:text-blue-300 mb-6">
+          <p className="text-lg text-blue-700 mb-6">
             Share this practice session with others! They&apos;ll get the same
             questions and settings.
           </p>
@@ -472,7 +529,7 @@ function ShareModal({
                 type="text"
                 value={shareUrl}
                 readOnly
-                className="flex-1 px-4 py-3 text-sm bg-white dark:bg-neutral-800 border-2 border-blue-300 dark:border-blue-700 rounded-2xl font-mono text-blue-800 dark:text-blue-200 focus:outline-none focus:border-blue-500 transition-all duration-200"
+                className="flex-1 px-4 py-3 text-sm bg-white border-2 border-blue-300 rounded-2xl font-mono text-blue-800 focus:outline-none focus:border-blue-500 transition-all duration-200"
                 placeholder="Generating share link..."
               />
               <Button
@@ -490,19 +547,17 @@ function ShareModal({
 
           {/* Success message */}
           {isCopied && (
-            <div className="mb-6 p-3 bg-green-100 dark:bg-green-900 border-2 border-green-300 dark:border-green-700 rounded-2xl">
-              <p className="text-green-800 dark:text-green-200 font-semibold">
+            <div className="mb-6 p-3 bg-green-100 border-2 border-green-300 rounded-2xl">
+              <p className="text-green-800 font-semibold">
                 ✓ Link copied to clipboard!
               </p>
             </div>
           )}
 
           {/* Practice details */}
-          <div className="mb-6 p-4 bg-white dark:bg-neutral-800 border-2 border-blue-200 dark:border-blue-700 rounded-2xl text-left">
-            <h3 className="font-bold text-blue-800 dark:text-blue-200 mb-2">
-              Session Details:
-            </h3>
-            <div className="space-y-1 text-sm text-blue-700 dark:text-blue-300">
+          <div className="mb-6 p-4 bg-white border-2 border-blue-200 rounded-2xl text-left">
+            <h3 className="font-bold text-blue-800 mb-2">Session Details:</h3>
+            <div className="space-y-1 text-sm text-blue-700">
               <p>
                 <span className="font-semibold">Assessment:</span>{" "}
                 {practiceSelections.assessment}
@@ -575,8 +630,8 @@ const DuolingoInput = React.memo(function DuolingoInput({
           disabled={disabled}
           className={`w-full px-4 py-4 text-lg font-medium border-2 border-b-4 rounded-2xl focus:outline-none transition-all duration-200 shadow-sm ${
             disabled
-              ? "border-gray-300 bg-gray-100 dark:bg-neutral-700 dark:border-neutral-600 text-gray-500 dark:text-gray-400 cursor-not-allowed"
-              : "border-gray-300 dark:border-neutral-600 focus:border-blue-500 focus:border-b-blue-500 focus:ring-0 bg-white dark:bg-neutral-800 dark:text-foreground hover:shadow-md focus:shadow-lg"
+              ? "border-gray-300 bg-gray-100 text-gray-500 cursor-not-allowed"
+              : "border-gray-300 focus:border-blue-500 focus:border-b-blue-500 focus:ring-0 bg-white hover:shadow-md focus:shadow-lg"
           }`}
         />
       </div>
@@ -631,11 +686,11 @@ const AnswerOptions = React.memo(function AnswerOptions({
       {optionEntries.map(([key, value], index) => {
         const trimmedKey = key.trim();
         const isCorrectAnswer =
-          isAnswerChecked && checkAnswerValidity(trimmedKey, correctAnswers);
+          isAnswerChecked && correctAnswers.includes(trimmedKey);
         const isSelectedWrongAnswer =
           isAnswerChecked &&
           selectedAnswer?.trim() === trimmedKey &&
-          !checkAnswerValidity(trimmedKey, correctAnswers);
+          !correctAnswers.includes(trimmedKey);
         const isSelected = selectedAnswer?.trim() === trimmedKey;
 
         return (
@@ -657,13 +712,13 @@ const AnswerOptions = React.memo(function AnswerOptions({
               }}
               className={`relative ${
                 disabledOptions[key]
-                  ? " cursor-not-allowed after:absolute after:inset-0 after:h-0.5 after:w-[102.5%] after:bg-black dark:after:bg-white after:-translate-x-1/2 after:left-1/2 after:top-1/2 after:-translate-y-1/2"
+                  ? " cursor-not-allowed after:absolute after:inset-0 after:h-0.5 after:w-[102.5%] after:bg-black after:-translate-x-1/2 after:left-1/2 after:top-1/2 after:-translate-y-1/2"
                   : isAnswerChecked || isReviewMode
                     ? "cursor-default"
                     : "cursor-pointer"
               } w-full transition duration-500 ${
                 isAnswerChecked &&
-                (isCorrectAnswer || checkAnswerValidity(key, correctAnswers))
+                (isCorrectAnswer || correctAnswers.includes(key))
                   ? "border-2 border-green-500 bg-green-500/10"
                   : isSelectedWrongAnswer
                     ? "border-2 border-red-500 bg-red-500/10"
@@ -682,7 +737,7 @@ const AnswerOptions = React.memo(function AnswerOptions({
                           ? "border-red-500 bg-red-500 text-white"
                           : isSelected
                             ? "border-blue-500 bg-blue-500 text-white"
-                            : "border-gray-300 bg-gray-50 dark:bg-neutral-700 dark:border-neutral-500 text-gray-600 dark:text-gray-300"
+                            : "border-gray-300 bg-gray-50 text-gray-600"
                     }`}
                   >
                     {isCorrectAnswer ? (
@@ -931,10 +986,9 @@ function appReducer(state: AppState, action: AppAction): AppState {
         disabledOptions: {},
         isAnswerChecked: isReturningToPreviousQuestion,
         isAnswerCorrect: isReturningToPreviousQuestion
-          ? checkAnswerValidity(
-              previousAnswer,
-              state.questions?.[newStep]?.correct_answer,
-            )
+          ? state.questions?.[newStep]?.correct_answer
+              .map((answer) => answer.trim())
+              .includes(previousAnswer?.trim() || "") || false
           : false,
         questionStartTime: Date.now(), // Always start from current time
         currentQuestionElapsedTime: isReturningToInProgress
@@ -1141,45 +1195,20 @@ export default function PracticeRushMultistep({
   const router = useRouter();
   const confettiRef = useRef<ConfettiRef>(null);
 
-  const reduxDispatch = useAppDispatch();
-  const reduxState = useAppSelector((s) => s);
-  const isAuthenticated = useAppSelector(selectIsAuthenticated);
-  const reduxStatistics = useAppSelector(selectUserStatistics);
-  const reduxSessions = useAppSelector(selectUserSessions);
-  const reduxNotes = useAppSelector(selectQuestionNotes);
-
   const [state, dispatch] = useReducer(appReducer, initialState);
   const [isGridCollapsed, setIsGridCollapsed] = useState(false);
 
-  // Question notes: use Redux state for authenticated users (fetched in practice.tsx
-  // before this component mounts), fall back to localStorage for unauthenticated users.
-  // Local state is the working copy; writes go through debouncedSaveNotes which keeps
-  // Redux + localStorage + the API in sync.
-  const [localNotes, setLocalNotes] = useState<QuestionNotes>(() => {
-    if (typeof window === "undefined") return {};
-    try {
-      const raw = localStorage.getItem("questionNotes");
-      return raw ? (JSON.parse(raw) as QuestionNotes) : {};
-    } catch {
-      return {};
-    }
-  });
-
-  // Authoritative notes value: Redux when authenticated (already fetched), local otherwise.
-  const questionNotes: QuestionNotes = isAuthenticated
-    ? (reduxNotes ?? localNotes)
-    : localNotes;
-
-  // Setter that keeps local state, Redux, localStorage, and the API in sync
-  const setQuestionNotes = useCallback(
-    (updated: QuestionNotes) => {
-      setLocalNotes(updated);
-      debouncedSaveNotes(updated, reduxDispatch, reduxState);
-    },
-    [reduxDispatch, reduxState],
+  // Load question notes from localStorage
+  const [questionNotes, setQuestionNotes] = useLocalStorage<QuestionNotes>(
+    "questionNotes",
+    {},
   );
 
-  const [savedQuestions, setSavedQuestions] = useResolvedBookmarks();
+  // Load saved questions from localStorage
+  const [savedQuestions, setSavedQuestions] = useLocalStorage<SavedQuestions>(
+    "savedQuestions",
+    {},
+  );
 
   // Check URL parameters to determine if this is a continue session
   const isContinueSession = useMemo(() => {
@@ -1190,28 +1219,11 @@ export default function PracticeRushMultistep({
     return false;
   }, []);
 
-  const findSessionIndex = useCallback(
-    (sessionId: string) => {
-      if (isAuthenticated) {
-        return reduxSessions.findIndex((s) => s.sessionId === sessionId);
-      }
-      try {
-        const raw = localStorage.getItem("practiceHistory");
-        const sessions: PracticeSession[] = raw ? JSON.parse(raw) : [];
-        return sessions.findIndex((s) => s.sessionId === sessionId);
-      } catch {
-        return -1;
-      }
-    },
-    [isAuthenticated, reduxSessions],
-  );
-
   // Track saving status with ref to avoid re-renders
   const isSavingRef = useRef(false);
 
   // Auto-save session data to localStorage
   const saveCurrentSession = useCallback(() => {
-    console.log("saveCurrentSession() function invocation");
     // Don't save if session is already completed (in full review mode)
     if (
       restoredSessionData &&
@@ -1249,7 +1261,7 @@ export default function PracticeRushMultistep({
           ? question.correct_answer
           : [question.correct_answer];
 
-        if (checkAnswerValidity(userAnswer, correctAnswers)) {
+        if (correctAnswers.map((e) => e.trim()).includes(userAnswer)) {
           correctAnswersCount++;
         }
       }
@@ -1303,28 +1315,34 @@ export default function PracticeRushMultistep({
     };
 
     try {
-      // Save current session via the sync layer (handles localStorage + API for authenticated users)
-      debouncedSaveCurrentSession(currentSession, reduxDispatch, reduxState);
+      // Save current session
+      localStorage.setItem(
+        "currentPracticeSession",
+        JSON.stringify(currentSession),
+      );
 
-      if (!isAuthenticated) {
-        const existingSessions = localStorage.getItem("practiceHistory");
-        const sessions: PracticeSession[] = existingSessions
-          ? JSON.parse(existingSessions)
-          : [];
+      // Update practice sessions history
+      const existingSessions = localStorage.getItem("practiceHistory");
+      const sessions: PracticeSession[] = existingSessions
+        ? JSON.parse(existingSessions)
+        : [];
 
-        const existingIndex = sessions.findIndex(
-          (session) => session.sessionId === state.sessionId,
-        );
+      // Find if this session already exists in history
+      const existingIndex = sessions.findIndex(
+        (session) => session.sessionId === state.sessionId,
+      );
 
-        if (existingIndex !== -1) {
-          sessions[existingIndex] = currentSession;
-        } else {
-          sessions.push(currentSession);
-        }
-
-        const recentSessions = sessions.slice(-20);
-        localStorage.setItem("practiceHistory", JSON.stringify(recentSessions));
+      if (existingIndex !== -1) {
+        // Update existing session
+        sessions[existingIndex] = currentSession;
+      } else {
+        // Add new session
+        sessions.push(currentSession);
       }
+
+      // Keep only last 20 sessions
+      const recentSessions = sessions.slice(-20);
+      localStorage.setItem("practiceHistory", JSON.stringify(recentSessions));
 
       // Show saving indicator briefly
       setTimeout(() => {
@@ -1427,8 +1445,10 @@ export default function PracticeRushMultistep({
         dispatch({ type: "SET_SELECTED_ANSWER", payload: savedAnswer });
 
         // Check if the answer was correct
-        const correctAnswers = currentQuestion.correct_answer;
-        const isCorrect = checkAnswerValidity(savedAnswer, correctAnswers);
+        const correctAnswers = currentQuestion.correct_answer.map((e) =>
+          e.trim(),
+        );
+        const isCorrect = correctAnswers.includes(savedAnswer.trim());
 
         // Set answer as checked with correct status
         dispatch({
@@ -1569,16 +1589,16 @@ export default function PracticeRushMultistep({
   }, [questionAnswersCount, saveCurrentSession]);
 
   // Save session when user progresses to next question (debounced)
-  // useEffect(() => {
-  //   if (state.currentQuestionStep > 0 && !isSavingRef.current) {
-  //     // Debounce to avoid too frequent saves
-  //     const timeoutId = setTimeout(() => {
-  //       saveCurrentSession();
-  //     }, 1000);
+  useEffect(() => {
+    if (state.currentQuestionStep > 0 && !isSavingRef.current) {
+      // Debounce to avoid too frequent saves
+      const timeoutId = setTimeout(() => {
+        saveCurrentSession();
+      }, 1000);
 
-  //     return () => clearTimeout(timeoutId);
-  //   }
-  // }, [state.currentQuestionStep, saveCurrentSession]);
+      return () => clearTimeout(timeoutId);
+    }
+  }, [state.currentQuestionStep, saveCurrentSession]);
 
   // Save session before page unload
   useEffect(() => {
@@ -1605,7 +1625,7 @@ export default function PracticeRushMultistep({
                 ? question.correct_answer
                 : [question.correct_answer];
 
-              if (checkAnswerValidity(userAnswer, correctAnswers)) {
+              if (correctAnswers.map((e) => e.trim()).includes(userAnswer)) {
                 correctAnswersCount++;
               }
             }
@@ -1650,35 +1670,10 @@ export default function PracticeRushMultistep({
             totalXPReceived: state.sessionXPReceived, // Include session XP tracking
           };
           try {
-            // Save via sync layer (localStorage first + API for authenticated users)
-            debouncedSaveCurrentSession(
-              currentSession,
-              reduxDispatch,
-              reduxState,
+            localStorage.setItem(
+              "currentPracticeSession",
+              JSON.stringify(currentSession),
             );
-
-            if (!isAuthenticated) {
-              const existingSessions = localStorage.getItem("practiceHistory");
-              const sessions: PracticeSession[] = existingSessions
-                ? JSON.parse(existingSessions)
-                : [];
-
-              const existingIndex = sessions.findIndex(
-                (session) => session.sessionId === state.sessionId,
-              );
-
-              if (existingIndex !== -1) {
-                sessions[existingIndex] = currentSession;
-              } else {
-                sessions.push(currentSession);
-              }
-
-              const recentSessions = sessions.slice(-20);
-              localStorage.setItem(
-                "practiceHistory",
-                JSON.stringify(recentSessions),
-              );
-            }
           } catch (error) {
             console.error("Failed to save session on unload:", error);
           }
@@ -1726,7 +1721,7 @@ export default function PracticeRushMultistep({
           ? question.correct_answer
           : [question.correct_answer];
 
-        if (checkAnswerValidity(userAnswer, correctAnswers)) {
+        if (correctAnswers.map((e) => e.trim()).includes(userAnswer)) {
           correctAnswersCount++;
         }
       }
@@ -1766,30 +1761,26 @@ export default function PracticeRushMultistep({
     };
 
     try {
-      // Determine if this session already exists (used to pick save vs update)
-      const existingIndex = findSessionIndex(state.sessionId);
+      // Save completed session to history
+      const existingSessions = localStorage.getItem("practiceHistory");
+      const sessions: PracticeSession[] = existingSessions
+        ? JSON.parse(existingSessions)
+        : [];
 
-      // Sync completed session via dataSync: saves to DB for authenticated users,
-      // or writes to localStorage ("practiceHistory") for unauthenticated users.
+      // Update or add the completed session
+      const existingIndex = sessions.findIndex(
+        (session) => session.sessionId === state.sessionId,
+      );
       if (existingIndex !== -1) {
-        updatePracticeSession(
-          completedSession.sessionId,
-          completedSession,
-          reduxDispatch,
-          reduxState,
-        );
+        sessions[existingIndex] = completedSession;
       } else {
-        savePracticeSession(completedSession, reduxDispatch, reduxState);
+        sessions.push(completedSession);
       }
 
-      // Remove the in-progress session marker (complete path: updateSession then remove)
-      removeCurrentSession(
-        completedSession.sessionId,
-        completedSession,
-        false, // abandon=false (completion path)
-        reduxDispatch,
-        reduxState,
-      );
+      localStorage.setItem("practiceHistory", JSON.stringify(sessions));
+
+      // Clear current session since it's completed
+      localStorage.removeItem("currentPracticeSession");
 
       console.log("Practice session completed and saved!", completedSession);
       console.log("Session ID:", completedSession.sessionId);
@@ -1878,13 +1869,14 @@ export default function PracticeRushMultistep({
           dispatch({ type: "SET_QUESTIONS_PROCESSED_COUNT", payload: i + 1 });
         }
 
-        const questionData = await fetchQuestionsbyIBN_ExternalId(
-          question.external_id
-            ? question.external_id
-            : question.ibn
-              ? question.ibn
-              : "",
-        );
+        const questionData: API_Response_Question =
+          await fetchQuestionsbyIBN_ExternalId(
+            question.external_id
+              ? question.external_id
+              : question.ibn
+                ? question.ibn
+                : "",
+          );
 
         if (questionData && questionData.correct_answer)
           questions.push({ plainQuestion: question, data: questionData });
@@ -2070,13 +2062,7 @@ export default function PracticeRushMultistep({
 
         let lookupData: LookupRequest | undefined = state.lookupData;
         const lookupResponse = await fetch("/api/lookup")
-          .then(
-            (res) =>
-              res.json() as Promise<{
-                data?: LookupRequest;
-                success?: boolean;
-              }>,
-          )
+          .then((res) => res.json())
           .catch((error) => {
             console.error("Error fetching questions:", error);
             toast.error("Failed to Fetch Questions", {
@@ -2084,12 +2070,12 @@ export default function PracticeRushMultistep({
                 "Unable to load practice questions. Please check your connection and try again.",
               duration: 5000,
             });
-            return {} as { data?: LookupRequest; success?: boolean };
+            return [];
           });
 
         console.log("lookupResponse", lookupResponse);
         if ("data" in lookupResponse) {
-          lookupData = lookupResponse.data ?? undefined;
+          lookupData = lookupResponse.data || null;
           console.log("lookupData", lookupData);
 
           if (lookupData) {
@@ -2130,35 +2116,9 @@ export default function PracticeRushMultistep({
 
           dispatch({ type: "SET_CURRENT_STEP", payload: 3 });
 
-          // Extract plain questions from answered question details.
-          // DB rows written after the schema change no longer carry plainQuestion.
-          // Build a minimal PlainQuestionType from questionId / externalId / ibn
-          // so fetchQuestionDetails can call the question bank API.
+          // Extract plain questions from answered question details
           const validPlainQuestions = answeredQuestionDetails
-            .map((item) => {
-              // Prefer legacy plainQuestion if the old row still has it
-              if (item.plainQuestion) return item.plainQuestion;
-              // New rows: reconstruct the minimum needed for the API fetch
-              const id = item.externalId ?? item.ibn ?? "";
-              if (!id) return null;
-              return {
-                questionId: item.questionId,
-                external_id: item.externalId ?? null,
-                ibn: item.ibn ?? null,
-                primary_class_cd: "" as import("@/types/lookup").DomainItems,
-                primary_class_cd_desc: "",
-                skill_cd: "" as import("@/types/lookup").SkillCd_Variants,
-                skill_desc: "",
-                difficulty:
-                  "M" as import("@/types/question").QuestionDifficulty,
-                program: "",
-                pPcc: "",
-                uId: "",
-                score_band_range_cd: 0,
-                createDate: 0,
-                updateDate: 0,
-              } as import("@/types/question").PlainQuestionType;
-            })
+            .map((item) => item.plainQuestion)
             .filter((q) => q !== null) as PlainQuestionType[];
 
           if (validPlainQuestions.length > 0) {
@@ -2211,7 +2171,9 @@ export default function PracticeRushMultistep({
               );
               return (
                 userAnswer &&
-                checkAnswerValidity(userAnswer, question?.correct_answer)
+                question?.correct_answer
+                  ?.map((a) => a.trim())
+                  .includes(userAnswer)
               );
             }).length;
 
@@ -2241,16 +2203,11 @@ export default function PracticeRushMultistep({
         let otherParams = "";
 
         if (!selections.questionIds) {
-          const assessmentStatistics: PracticeStatistics = isAuthenticated
-            ? (reduxStatistics as PracticeStatistics)
-            : (() => {
-                try {
-                  const raw = localStorage.getItem("practiceStatistics");
-                  return raw ? JSON.parse(raw) : {};
-                } catch {
-                  return {};
-                }
-              })();
+          // load practiceStatistics local storage, and get the current assessment statistics
+          const practiceStatistics = localStorage.getItem("practiceStatistics");
+          const assessmentStatistics: PracticeStatistics = practiceStatistics
+            ? JSON.parse(practiceStatistics)
+            : {};
 
           if (selections.assessment in assessmentStatistics) {
             const currentAssessmentStatistics =
@@ -2297,10 +2254,7 @@ export default function PracticeRushMultistep({
               .map((s) => s.skill_cd)
               .join(",")}${otherParams}`,
           )
-            .then(
-              (res) =>
-                res.json() as Promise<{ data?: API_Response_Question_List }>,
-            )
+            .then((res) => res.json())
             .catch((error) => {
               console.error("Error fetching questions:", error);
               toast.error("Failed to Fetch Questions", {
@@ -2308,9 +2262,9 @@ export default function PracticeRushMultistep({
                   "Unable to load practice questions. Please check your connection and try again.",
                 duration: 5000,
               });
-              return {} as { data?: API_Response_Question_List };
+              return [];
             });
-          questionsData = questionsResponse.data ?? null;
+          questionsData = questionsResponse.data || null;
 
           // Cache the questions data with the selections hash for future reuse
         }
@@ -2318,15 +2272,9 @@ export default function PracticeRushMultistep({
         // Create a hash of the practice selections to check cache compatibility
         const selectionsHash = JSON.stringify({
           assessment: selections.assessment,
-          domains: selections.domains
-            ?.map((d) => d.primaryClassCd)
-            .slice()
-            .sort(),
-          difficulties: selections.difficulties?.slice().sort(),
-          skills: selections.skills
-            ?.map((s) => s.skill_cd)
-            .slice()
-            .sort(),
+          domains: selections.domains?.map((d) => d.primaryClassCd).sort(),
+          difficulties: selections.difficulties?.sort(),
+          skills: selections.skills?.map((s) => s.skill_cd).sort(),
           // Don't include questionIds in hash as those are for shared links
         });
 
@@ -2392,37 +2340,9 @@ export default function PracticeRushMultistep({
 
           dispatch({ type: "SET_CURRENT_STEP", payload: 3 });
 
-          // Extract plain questions from restored session data.
-          // DB rows written after the schema change no longer carry plainQuestion
-          // in answeredQuestionDetails. Build a minimal PlainQuestionType from
-          // the always-present questionId / externalId / ibn so fetchQuestionDetails
-          // can call the question bank API without needing the full metadata.
+          // Extract plain questions from restored session data
           const validPlainQuestions = questionDetails
-            .map((item) => {
-              // Prefer legacy plainQuestion if the old row still has it
-              if (item.plainQuestion) return item.plainQuestion;
-              // New rows: reconstruct the minimum needed for the API fetch
-              const id = item.externalId ?? item.ibn ?? "";
-              if (!id) return null;
-              return {
-                questionId: item.questionId,
-                external_id: item.externalId ?? null,
-                ibn: item.ibn ?? null,
-                // Safe defaults for fields only used after the question bank fetch
-                primary_class_cd: "" as import("@/types/lookup").DomainItems,
-                primary_class_cd_desc: "",
-                skill_cd: "" as import("@/types/lookup").SkillCd_Variants,
-                skill_desc: "",
-                difficulty:
-                  "M" as import("@/types/question").QuestionDifficulty,
-                program: "",
-                pPcc: "",
-                uId: "",
-                score_band_range_cd: 0,
-                createDate: 0,
-                updateDate: 0,
-              } as import("@/types/question").PlainQuestionType;
-            })
+            .map((item) => item.plainQuestion)
             .filter((q) => q !== null) as PlainQuestionType[];
 
           if (validPlainQuestions.length > 0) {
@@ -2534,7 +2454,9 @@ export default function PracticeRushMultistep({
                 );
                 return (
                   userAnswer &&
-                  checkAnswerValidity(userAnswer, question?.correct_answer)
+                  question?.correct_answer
+                    ?.map((a) => a.trim())
+                    .includes(userAnswer)
                 );
               },
             ).length;
@@ -2666,14 +2588,10 @@ export default function PracticeRushMultistep({
         assessment: practiceSelections.assessment,
         domains: practiceSelections.domains
           ?.map((d) => d.primaryClassCd)
-          .slice()
           .sort(),
-        difficulties: practiceSelections.difficulties?.slice().sort(),
-        skills: practiceSelections.skills
-          ?.map((s) => s.skill_cd)
-          .slice()
-          .sort(),
-        questionIds: practiceSelections.questionIds?.slice().sort(),
+        difficulties: practiceSelections.difficulties?.sort(),
+        skills: practiceSelections.skills?.map((s) => s.skill_cd).sort(),
+        questionIds: practiceSelections.questionIds?.sort(),
         // Include review mode and session ID in hash to prevent fetching for same session
         effectiveReviewMode: effectiveReviewMode,
         sessionId: restoredSessionData?.sessionId,
@@ -2702,18 +2620,20 @@ export default function PracticeRushMultistep({
   ]);
 
   async function fetchQuestionsbyIBN_ExternalId(id: string) {
-    const questionResponse = await fetch(`/api/question/${id}`)
-      .then((res) => res.json() as Promise<{ data: API_Response_Question }>)
+    const questionResponse: { data: API_Response_Question } = await fetch(
+      `/api/question/${id}`,
+    )
+      .then((res) => res.json())
       .catch((error) => {
         console.error("Error fetching question:", error);
         toast.error("Failed to Load Question", {
           description: `Unable to load question ${id}. This question will be skipped.`,
           duration: 4000,
         });
-        return null as null;
+        return null;
       });
 
-    return questionResponse?.data;
+    return questionResponse.data;
   }
 
   const loadNextBatch = useCallback(async () => {
@@ -2831,13 +2751,14 @@ export default function PracticeRushMultistep({
           payload: i + 1,
         });
 
-        const questionData = await fetchQuestionsbyIBN_ExternalId(
-          question.ibn
-            ? question.ibn
-            : question.external_id
-              ? question.external_id
-              : "",
-        );
+        const questionData: API_Response_Question =
+          await fetchQuestionsbyIBN_ExternalId(
+            question.ibn
+              ? question.ibn
+              : question.external_id
+                ? question.external_id
+                : "",
+          );
 
         if (questionData) questions.push(questionData);
       }
@@ -2934,12 +2855,10 @@ export default function PracticeRushMultistep({
 
         if (!state.isAnswerChecked) {
           // First time answering this question
-          const correctAnswers = currentQuestion.correct_answer;
-
-          const correct = checkAnswerValidity(
-            state.selectedAnswer,
-            correctAnswers,
+          const correctAnswers = currentQuestion.correct_answer.map((e) =>
+            e.trim(),
           );
+          const correct = correctAnswers.includes(state.selectedAnswer.trim());
 
           // Play sound based on answer correctness
           if (correct) {
@@ -2974,30 +2893,25 @@ export default function PracticeRushMultistep({
           try {
             const assessmentType =
               practiceSelections.assessment as AssessmentType;
-
-            console.log("reduxState", reduxState);
-            addQuestionStatistic(
-              {
-                assessment: assessmentType,
-                primaryClassCd: currentQuestion.plainQuestion.primary_class_cd,
-                skillCd: currentQuestion.plainQuestion.skill_cd,
-                questionId: currentQuestion.plainQuestion.questionId,
+            addQuestionStatistic({
+              assessment: assessmentType,
+              primaryClassCd: currentQuestion.plainQuestion.primary_class_cd,
+              skillCd: currentQuestion.plainQuestion.skill_cd,
+              questionId: currentQuestion.plainQuestion.questionId,
+              external_id:
+                currentQuestion.plainQuestion.external_id || undefined,
+              ibn: currentQuestion.plainQuestion.ibn || undefined,
+              plainQuestion: currentQuestion.plainQuestion, // Include full plainQuestion data
+              statistic: {
+                time: timeElapsed,
+                answer: state.selectedAnswer,
+                isCorrect: correct,
                 external_id:
                   currentQuestion.plainQuestion.external_id || undefined,
                 ibn: currentQuestion.plainQuestion.ibn || undefined,
-                plainQuestion: currentQuestion.plainQuestion, // Include full plainQuestion data
-                statistic: {
-                  time: timeElapsed,
-                  answer: state.selectedAnswer,
-                  isCorrect: correct,
-                  external_id:
-                    currentQuestion.plainQuestion.external_id || undefined,
-                  ibn: currentQuestion.plainQuestion.ibn || undefined,
-                  plainQuestion: currentQuestion.plainQuestion, // Include in statistic as well
-                },
+                plainQuestion: currentQuestion.plainQuestion, // Include in statistic as well
               },
-              { dispatch: reduxDispatch, state: reduxState },
-            );
+            });
 
             // Also save detailed answered question with difficulty
             addAnsweredQuestion(
@@ -3008,12 +2922,8 @@ export default function PracticeRushMultistep({
               timeElapsed,
               currentQuestion.plainQuestion, // Include plainQuestion data
               state.selectedAnswer, // Include the selected answer
-              { dispatch: reduxDispatch, state: reduxState },
             );
 
-            // console.log("practiceSelections", practiceSelections);
-
-            // console.log("assessmentType", assessmentType);
             // Update user profile and XP based on answer correctness
             const scoreBandRange =
               currentQuestion.plainQuestion.score_band_range_cd;
@@ -3027,15 +2937,15 @@ export default function PracticeRushMultistep({
                 scoreBandRange,
               );
 
-              // // Calculate session XP change
-              // sessionXPChange = scoreBandRange * 10;
+              // Calculate session XP change
+              sessionXPChange = scoreBandRange * 10;
 
-              // // Show XP gain notification
-              // const xpGain = scoreBandRange * 10;
-              // toast.success(`Correct! +${xpGain} XP! 🎯`, {
-              //   description: `Total XP: ${updatedProfile.totalXP} | Level: ${updatedProfile.level}`,
-              //   duration: 3000,
-              // });
+              // Show XP gain notification
+              const xpGain = scoreBandRange * 10;
+              toast.success(`Correct! +${xpGain} XP! 🎯`, {
+                description: `Total XP: ${updatedProfile.totalXP} | Level: ${updatedProfile.level}`,
+                duration: 3000,
+              });
             } else {
               // Reduce XP for incorrect answer
               updatedProfile = reduceXPForIncorrectAnswer(
@@ -3043,25 +2953,22 @@ export default function PracticeRushMultistep({
                 scoreBandRange,
               );
 
-              // // Calculate session XP change (negative)
-              // sessionXPChange = -Math.floor((scoreBandRange * 10) / 2);
+              // Calculate session XP change (negative)
+              sessionXPChange = -Math.floor((scoreBandRange * 10) / 2);
 
-              // // Show XP loss notification
-              // const xpLoss = Math.floor((scoreBandRange * 10) / 2);
-              // toast.error(`Incorrect. -${xpLoss} XP 💔`, {
-              //   description: `Total XP: ${updatedProfile.totalXP} | Level: ${updatedProfile.level}`,
-              //   duration: 3000,
-              // });
+              // Show XP loss notification
+              const xpLoss = Math.floor((scoreBandRange * 10) / 2);
+              toast.error(`Incorrect. -${xpLoss} XP 💔`, {
+                description: `Total XP: ${updatedProfile.totalXP} | Level: ${updatedProfile.level}`,
+                duration: 3000,
+              });
             }
 
             // Update session XP tracking
             dispatch({ type: "ADD_SESSION_XP", payload: sessionXPChange });
 
-            // // Update practice history immediately with new XP
-            // updateSessionXP(state.sessionId, sessionXPChange, {
-            //   dispatch: reduxDispatch,
-            //   state: reduxState,
-            // });
+            // Update practice history immediately with new XP
+            updateSessionXP(state.sessionId, sessionXPChange);
 
             console.log("📊 Updated user profile:", {
               totalXP: updatedProfile.totalXP,
@@ -3071,20 +2978,6 @@ export default function PracticeRushMultistep({
               incorrectAnswers: updatedProfile.incorrectAnswers,
               sessionXPChange,
             });
-
-            // Sync profile and statistics to DB for authenticated users
-            // syncSaveUserProfile(updatedProfile, reduxDispatch, reduxState);
-            // const currentStats = isAuthenticated
-            //   ? (reduxStatistics as PracticeStatistics)
-            //   : (() => {
-            //       try {
-            //         const raw = localStorage.getItem("practiceStatistics");
-            //         return raw ? JSON.parse(raw) : {};
-            //       } catch {
-            //         return {};
-            //       }
-            //     })();
-            // saveUserStatistics(currentStats, reduxDispatch, reduxState);
 
             // currentQuestion.plainQuestion.score_band_range_cd
           } catch (error) {
@@ -3266,7 +3159,7 @@ export default function PracticeRushMultistep({
           ? question.correct_answer
           : [question.correct_answer];
 
-        if (checkAnswerValidity(userAnswer, correctAnswers)) {
+        if (correctAnswers.map((e) => e.trim()).includes(userAnswer)) {
           correctAnswersCount++;
         }
       }
@@ -3307,32 +3200,23 @@ export default function PracticeRushMultistep({
     };
 
     try {
-      // Determine if this session already exists (used to pick save vs update)
-      const existingIndex = findSessionIndex(state.sessionId);
+      // Save session using localStorage directly
+      const existingSessions = localStorage.getItem("practiceHistory");
+      const sessions: PracticeSession[] = existingSessions
+        ? JSON.parse(existingSessions)
+        : [];
 
       // Update or add the abandoned session
-
-      // Sync abandoned session via dataSync: saves to DB for authenticated users,
-      // or writes to localStorage ("practiceHistory") for unauthenticated users.
+      const existingIndex = sessions.findIndex(
+        (session) => session.sessionId === state.sessionId,
+      );
       if (existingIndex !== -1) {
-        updatePracticeSession(
-          abandonedSession.sessionId,
-          abandonedSession,
-          reduxDispatch,
-          reduxState,
-        );
+        sessions[existingIndex] = abandonedSession;
       } else {
-        savePracticeSession(abandonedSession, reduxDispatch, reduxState);
+        sessions.push(abandonedSession);
       }
 
-      // Remove the in-progress session marker (abandon path: no updateSession, just remove)
-      removeCurrentSession(
-        abandonedSession.sessionId,
-        null,
-        true, // abandon=true (abandon path)
-        reduxDispatch,
-        reduxState,
-      );
+      localStorage.setItem("practiceHistory", JSON.stringify(sessions));
 
       console.log("Practice session saved successfully as abandoned");
       console.log(
@@ -3379,38 +3263,38 @@ export default function PracticeRushMultistep({
           <React.Fragment>
             <div className="min-h-screen items-center justify-center pt-32 pb-10">
               {effectiveReviewMode && (
-                <div className="mb-6 p-4 bg-blue-100 dark:bg-blue-950 border-2 border-blue-300 dark:border-blue-800 rounded-lg text-center">
-                  <h4 className="text-lg font-bold text-blue-800 dark:text-blue-200 mb-1">
+                <div className="mb-6 p-4 bg-blue-100 border-2 border-blue-300 rounded-lg text-center">
+                  <h4 className="text-lg font-bold text-blue-800 mb-1">
                     📚 Review Mode - Session ID: {state.sessionId}
                   </h4>
-                  <p className="text-sm text-blue-600 dark:text-blue-400">
+                  <p className="text-sm text-blue-600">
                     You are reviewing a completed practice session. All answers
                     are read-only.
                   </p>
 
                   {/* Question Results Grid */}
                   {state.questions && state.questions.length > 0 && (
-                    <div className="mt-4 pt-4 border-t border-blue-100 dark:border-blue-900">
+                    <div className="mt-4 pt-4 border-t border-blue-100">
                       {/* Collapsible Header */}
                       <div
-                        className="flex items-center justify-between cursor-pointer hover:bg-blue-50 dark:hover:bg-blue-900/50 rounded-lg p-2 transition-colors"
+                        className="flex items-center justify-between cursor-pointer hover:bg-blue-50 rounded-lg p-2 transition-colors"
                         onClick={() => {
                           setIsGridCollapsed(!isGridCollapsed);
                           playSound("button-pressed.wav");
                         }}
                       >
-                        <div className="text-sm font-medium text-blue-900 dark:text-blue-200">
+                        <div className="text-sm font-medium text-blue-900">
                           Question Results (
                           {Object.keys(state.questionAnswers).length} answered)
                         </div>
                         <div className="flex items-center gap-1">
-                          <span className="text-xs text-blue-600 dark:text-blue-400">
+                          <span className="text-xs text-blue-600">
                             {isGridCollapsed ? "Show" : "Hide"}
                           </span>
                           {isGridCollapsed ? (
-                            <ChevronDown className="w-4 h-4 text-blue-600 dark:text-blue-400" />
+                            <ChevronDown className="w-4 h-4 text-blue-600" />
                           ) : (
-                            <ChevronUp className="w-4 h-4 text-blue-600 dark:text-blue-400" />
+                            <ChevronUp className="w-4 h-4 text-blue-600" />
                           )}
                         </div>
                       </div>
@@ -3433,10 +3317,9 @@ export default function PracticeRushMultistep({
                               const isAnswered = Boolean(userAnswer);
                               const isCorrect =
                                 isAnswered &&
-                                checkAnswerValidity(
-                                  userAnswer,
-                                  question.correct_answer,
-                                );
+                                question.correct_answer
+                                  .map((a) => a.trim())
+                                  .includes(userAnswer?.trim() || "");
                               const timeSpent =
                                 state.questionTimes[questionId] || 0;
                               const isCurrent =
@@ -3457,10 +3340,10 @@ export default function PracticeRushMultistep({
                                       : ""
                                   } ${
                                     !isAnswered
-                                      ? "bg-white dark:bg-neutral-800 border-gray-200 dark:border-neutral-600 text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-neutral-700 hover:border-gray-300 dark:hover:border-neutral-500"
+                                      ? "bg-white border-gray-200 text-gray-700 hover:bg-gray-50 hover:border-gray-300"
                                       : isCorrect
-                                        ? "bg-green-50 dark:bg-green-950 border-green-200 dark:border-green-800 text-green-800 dark:text-green-200 hover:bg-green-100 dark:hover:bg-green-900 hover:border-green-300 dark:hover:border-green-700"
-                                        : "bg-red-50 dark:bg-red-950 border-red-200 dark:border-red-800 text-red-800 dark:text-red-200 hover:bg-red-100 dark:hover:bg-red-900 hover:border-red-300 dark:hover:border-red-700"
+                                        ? "bg-green-50 border-green-200 text-green-800 hover:bg-green-100 hover:border-green-300"
+                                        : "bg-red-50 border-red-200 text-red-800 hover:bg-red-100 hover:border-red-300"
                                   }`}
                                   title={`Question ${idx + 1} - ${
                                     question.plainQuestion.difficulty === "E"
@@ -3479,7 +3362,7 @@ export default function PracticeRushMultistep({
                                 >
                                   {/* Status indicator dot */}
                                   <div
-                                    className={`absolute -top-1 -right-1 w-3 h-3 rounded-full border-2 border-white dark:border-neutral-800 ${
+                                    className={`absolute -top-1 -right-1 w-3 h-3 rounded-full border-2 border-white ${
                                       !isAnswered
                                         ? "bg-gray-400"
                                         : isCorrect
@@ -3497,11 +3380,11 @@ export default function PracticeRushMultistep({
                                   <div
                                     className={`inline-flex items-center justify-center rounded text-xs font-bold mb-1 px-1 py-1 ${
                                       question.plainQuestion.difficulty === "E"
-                                        ? "bg-green-200 dark:bg-green-900 text-green-800 dark:text-green-200"
+                                        ? "bg-green-200 text-green-800"
                                         : question.plainQuestion.difficulty ===
                                             "M"
-                                          ? "bg-yellow-200 dark:bg-yellow-900 text-yellow-800 dark:text-yellow-200"
-                                          : "bg-red-200 dark:bg-red-900 text-red-800 dark:text-red-200"
+                                          ? "bg-yellow-200 text-yellow-800"
+                                          : "bg-red-200 text-red-800"
                                     }`}
                                   >
                                     {question.plainQuestion.difficulty === "E"
@@ -3513,7 +3396,7 @@ export default function PracticeRushMultistep({
                                   </div>
 
                                   {/* Time spent */}
-                                  <div className="text-xs text-gray-600 dark:text-gray-400 mb-1">
+                                  <div className="text-xs text-gray-600 mb-1">
                                     {Math.floor(timeSpent / (1000 * 60))}m{" "}
                                     {Math.floor(
                                       (timeSpent % (1000 * 60)) / 1000,
@@ -3524,54 +3407,48 @@ export default function PracticeRushMultistep({
                               );
                             })}
                           </div>
-                          <div className="mt-4 p-3 bg-blue-50 dark:bg-blue-950 rounded-lg border border-blue-200 dark:border-blue-800">
+                          <div className="mt-4 p-3 bg-blue-50 rounded-lg border border-blue-200">
                             <div className="flex flex-wrap items-center justify-center gap-4 mb-2 text-xs">
                               <div className="flex items-center gap-1">
                                 <div className="w-3 h-3 bg-green-500 rounded-full"></div>
-                                <span className="text-green-700 dark:text-green-400 font-medium">
+                                <span className="text-green-700 font-medium">
                                   Correct
                                 </span>
                               </div>
                               <div className="flex items-center gap-1">
                                 <div className="w-3 h-3 bg-red-500 rounded-full"></div>
-                                <span className="text-red-700 dark:text-red-400 font-medium">
+                                <span className="text-red-700 font-medium">
                                   Incorrect
                                 </span>
                               </div>
                               <div className="flex items-center gap-1">
                                 <div className="w-3 h-3 bg-gray-400 rounded-full"></div>
-                                <span className="text-gray-700 dark:text-gray-400 font-medium">
+                                <span className="text-gray-700 font-medium">
                                   Not Answered
                                 </span>
                               </div>
                             </div>
                             <div className="flex flex-wrap items-center justify-center gap-4 text-xs">
                               <div className="flex items-center gap-1">
-                                <div className="w-5 h-4 bg-green-200 dark:bg-green-900 text-green-800 dark:text-green-200 rounded text-xs font-bold flex items-center justify-center">
+                                <div className="w-5 h-4 bg-green-200 text-green-800 rounded text-xs font-bold flex items-center justify-center">
                                   E
                                 </div>
-                                <span className="text-blue-700 dark:text-blue-400">
-                                  Easy
-                                </span>
+                                <span className="text-blue-700">Easy</span>
                               </div>
                               <div className="flex items-center gap-1">
-                                <div className="w-5 h-4 bg-yellow-200 dark:bg-yellow-900 text-yellow-800 dark:text-yellow-200 rounded text-xs font-bold flex items-center justify-center">
+                                <div className="w-5 h-4 bg-yellow-200 text-yellow-800 rounded text-xs font-bold flex items-center justify-center">
                                   M
                                 </div>
-                                <span className="text-blue-700 dark:text-blue-400">
-                                  Medium
-                                </span>
+                                <span className="text-blue-700">Medium</span>
                               </div>
                               <div className="flex items-center gap-1">
-                                <div className="w-5 h-4 bg-red-200 dark:bg-red-900 text-red-800 dark:text-red-200 rounded text-xs font-bold flex items-center justify-center">
+                                <div className="w-5 h-4 bg-red-200 text-red-800 rounded text-xs font-bold flex items-center justify-center">
                                   H
                                 </div>
-                                <span className="text-blue-700 dark:text-blue-400">
-                                  Hard
-                                </span>
+                                <span className="text-blue-700">Hard</span>
                               </div>
                             </div>
-                            <div className="mt-2 text-xs text-blue-600 dark:text-blue-400 text-center font-medium">
+                            <div className="mt-2 text-xs text-blue-600 text-center font-medium">
                               Click on any question to jump to it
                             </div>
                           </div>
@@ -3634,14 +3511,14 @@ export default function PracticeRushMultistep({
                           {currentQuestion.plainQuestion.primary_class_cd_desc}{" "}
                           - {currentQuestion.plainQuestion.skill_desc}
                           {state.isSavingSession && (
-                            <span className="ml-2 text-blue-600 dark:text-blue-400 text-xs">
+                            <span className="ml-2 text-blue-600 text-xs">
                               • Saving...
                             </span>
                           )}
                           {state.questionAnswers[
                             currentQuestion.plainQuestion.questionId
                           ] && (
-                            <span className="ml-2 text-orange-600 dark:text-orange-400 text-xs font-semibold">
+                            <span className="ml-2 text-orange-600 text-xs font-semibold">
                               • REVIEWING
                             </span>
                           )}
@@ -3671,7 +3548,7 @@ export default function PracticeRushMultistep({
                           disabled={state.currentQuestionStep === 0}
                           className={`group font-bold py-3 px-3 rounded-xl border-2 border-b-4 shadow-lg transform transition-all duration-200 ${
                             state.currentQuestionStep === 0
-                              ? "bg-gray-300 dark:bg-neutral-700 text-gray-500 dark:text-neutral-400 border-gray-400 dark:border-neutral-600 cursor-not-allowed"
+                              ? "bg-gray-300 text-gray-500 border-gray-400 cursor-not-allowed"
                               : "cursor-pointer bg-blue-500 hover:bg-blue-600 text-white border-blue-700 hover:border-blue-800 hover:shadow-xl active:translate-y-0.5 active:border-b-2"
                           }`}
                           onClick={() => {
@@ -3717,7 +3594,7 @@ export default function PracticeRushMultistep({
                             !state.questionAnswers[
                               currentQuestion?.plainQuestion.questionId || ""
                             ]
-                              ? "bg-gray-300 dark:bg-neutral-700 text-gray-500 dark:text-neutral-400 border-gray-400 dark:border-neutral-600 cursor-not-allowed"
+                              ? "bg-gray-300 text-gray-500 border-gray-400 cursor-not-allowed"
                               : "cursor-pointer bg-blue-500 hover:bg-blue-600 text-white border-blue-700 hover:border-blue-800 hover:shadow-xl active:translate-y-0.5 active:border-b-2"
                           }`}
                           onClick={() => {
@@ -3767,7 +3644,7 @@ export default function PracticeRushMultistep({
                       <TooltipTrigger asChild>
                         <Button
                           variant={"outline"}
-                          className="cursor-pointer group bg-white dark:bg-neutral-800 hover:bg-gray-50 dark:hover:bg-neutral-700 text-gray-700 dark:text-gray-200 font-bold py-3 px-6 rounded-2xl border-2 border-b-4 border-gray-300 dark:border-neutral-600 hover:border-gray-400 dark:hover:border-neutral-500 shadow-md hover:shadow-lg transform transition-all duration-200 active:translate-y-0.5 active:border-b-2"
+                          className="cursor-pointer group bg-white hover:bg-gray-50 text-gray-700 font-bold py-3 px-6 rounded-2xl border-2 border-b-4 border-gray-300 hover:border-gray-400 shadow-md hover:shadow-lg transform transition-all duration-200 active:translate-y-0.5 active:border-b-2"
                           onClick={() => {
                             dispatch({ type: "TOGGLE_REFERENCE_POPUP" });
                             playSound("button-pressed.wav");
@@ -3871,7 +3748,7 @@ export default function PracticeRushMultistep({
                       <TooltipTrigger asChild>
                         <Button
                           variant="default"
-                          className="justify-center items-center cursor-pointer bg-gray-600 hover:bg-gray-700 dark:bg-neutral-600 dark:hover:bg-neutral-500 text-white font-bold py-3 px-6 rounded-2xl border-b-4 border-gray-800 dark:border-neutral-700 hover:border-gray-900 dark:hover:border-neutral-600 shadow-md hover:shadow-lg transform transition-all duration-200 active:translate-y-0.5 active:border-b-2"
+                          className="justify-center items-center cursor-pointer bg-gray-600 hover:bg-gray-700 text-white font-bold py-3 px-6 rounded-2xl border-b-4 border-gray-800 hover:border-gray-900 shadow-md hover:shadow-lg transform transition-all duration-200 active:translate-y-0.5 active:border-b-2"
                           onClick={() => {
                             dispatch({ type: "TOGGLE_NOTES_POPUP" });
                             playSound("button-pressed.wav");
@@ -4129,14 +4006,14 @@ export default function PracticeRushMultistep({
                         {state.questionAnswers[
                           currentQuestion.plainQuestion.questionId
                         ] && (
-                          <div className="bg-orange-50 dark:bg-orange-950 border border-orange-200 dark:border-orange-800 rounded-lg p-4 mb-4">
+                          <div className="bg-orange-50 border border-orange-200 rounded-lg p-4 mb-4">
                             <div className="flex items-center gap-2 mb-2">
                               <div className="w-3 h-3 bg-orange-500 rounded-full"></div>
-                              <span className="text-orange-700 dark:text-orange-300 font-semibold">
+                              <span className="text-orange-700 font-semibold">
                                 Question Review
                               </span>
                             </div>
-                            <p className="text-orange-600 dark:text-orange-400 text-sm">
+                            <p className="text-orange-600 text-sm">
                               You are reviewing a previously answered question.
                               Your original answer and the explanation are shown
                               below.
@@ -4154,27 +4031,25 @@ export default function PracticeRushMultistep({
                           <span
                             className={`${
                               state.isAnswerCorrect
-                                ? "text-green-600 dark:text-green-400"
-                                : "text-red-600 dark:text-red-400"
+                                ? "text-green-600"
+                                : "text-red-600"
                             }`}
                           >
                             {state.selectedAnswer}
                           </span>
                           {state.isAnswerCorrect ? (
-                            <span className="ml-2 text-green-600 dark:text-green-400 text-sm">
+                            <span className="ml-2 text-green-600 text-sm">
                               ✓ Correct
                             </span>
                           ) : (
-                            <span className="ml-2 text-red-600 dark:text-red-400 text-sm">
+                            <span className="ml-2 text-red-600 text-sm">
                               ✗ Incorrect
                             </span>
                           )}
                         </Label>
                         <Label className="text-lg font-semibold">
                           Correct Answer:{" "}
-                          <span
-                            className={"text-green-600 dark:text-green-400"}
-                          >
+                          <span className={"text-green-600"}>
                             {currentQuestion.correct_answer.join(", ")}
                           </span>
                         </Label>
@@ -4191,7 +4066,7 @@ export default function PracticeRushMultistep({
                   } h-full `}
                 >
                   {practiceSelections?.subject !== "reading-writing" ? (
-                    <div className="border-2 border-gray-200 dark:border-neutral-700 shadow-lg overflow-hidden rounded-lg">
+                    <div className="border-2 border-gray-200 shadow-lg overflow-hidden rounded-lg">
                       <iframe
                         src="https://www.desmos.com/testing/cb-sat-ap/graphing"
                         width={"100%"}
@@ -4413,6 +4288,31 @@ export default function PracticeRushMultistep({
             return "";
           }
         })()}
+      />
+
+      {/* Success Feedback - only show for newly answered questions, not when reviewing */}
+      <SuccessFeedback
+        isVisible={
+          state.isAnswerChecked &&
+          state.isAnswerCorrect &&
+          state.isTimerActive === false // Timer is stopped only when answering, not when reviewing
+        }
+        onContinue={() => {
+          if (
+            state.questions &&
+            state.currentQuestionStep < state.questions.length - 1
+          ) {
+            dispatch({
+              type: "SET_CURRENT_QUESTION_STEP",
+              payload: state.currentQuestionStep + 1,
+            });
+          } else {
+            // At end of loaded questions - don't automatically continue
+            console.log(
+              "Reached end of loaded questions in success feedback. User can choose to continue or finish.",
+            );
+          }
+        }}
       />
 
       {/* Exit Confirmation */}

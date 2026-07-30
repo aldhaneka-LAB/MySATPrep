@@ -434,57 +434,57 @@ export function importStatistics(jsonData: string): boolean {
  * Always writes to localStorage. When `ctx` is provided and the user is
  * authenticated, also dispatches updateSessionThunk to keep the DB in sync.
  */
-export function updateSessionXP(
-  sessionId: string,
-  xpChange: number,
-  ctx?: SyncContext,
-): void {
-  try {
-    const existingSessions = localStorage.getItem("practiceHistory");
-    const sessions: PracticeSession[] = existingSessions
-      ? JSON.parse(existingSessions)
-      : [];
+// export function updateSessionXP(
+//   sessionId: string,
+//   xpChange: number,
+//   ctx?: SyncContext,
+// ): void {
+//   try {
+//     const existingSessions = localStorage.getItem("practiceHistory");
+//     const sessions: PracticeSession[] = existingSessions
+//       ? JSON.parse(existingSessions)
+//       : [];
 
-    // Find the session and update its totalXPReceived
-    const existingIndex = sessions.findIndex(
-      (session) => session.sessionId === sessionId,
-    );
+//     // Find the session and update its totalXPReceived
+//     const existingIndex = sessions.findIndex(
+//       (session) => session.sessionId === sessionId,
+//     );
 
-    if (existingIndex !== -1) {
-      const currentXP = sessions[existingIndex].totalXPReceived || 0;
-      const newXP = currentXP + xpChange;
-      sessions[existingIndex].totalXPReceived = newXP;
-      localStorage.setItem("practiceHistory", JSON.stringify(sessions));
-      console.log(
-        `📊 Updated session ${sessionId} XP: ${currentXP} + ${xpChange} = ${newXP}`,
-      );
+//     if (existingIndex !== -1) {
+//       const currentXP = sessions[existingIndex].totalXPReceived || 0;
+//       const newXP = currentXP + xpChange;
+//       sessions[existingIndex].totalXPReceived = newXP;
+//       localStorage.setItem("practiceHistory", JSON.stringify(sessions));
+//       console.log(
+//         `📊 Updated session ${sessionId} XP: ${currentXP} + ${xpChange} = ${newXP}`,
+//       );
 
-      // Sync to cloud for authenticated users
-      if (ctx && isAuthenticated(ctx)) {
-        const updatedSession = sessions[existingIndex];
-        withRetry(
-          () =>
-            ctx.dispatch(
-              updateSessionThunk({
-                id: sessionId,
-                sessionData: {
-                  totalXPReceived: updatedSession.totalXPReceived,
-                },
-              }),
-            ) as unknown as Promise<unknown>,
-        ).catch(() => {
-          showNetworkError(
-            "Failed to sync session XP. Please check your connection.",
-          );
-        });
-      }
-    } else {
-      console.warn(`Session ${sessionId} not found in practice history`);
-    }
-  } catch (error) {
-    console.error("Error updating session XP:", error);
-  }
-}
+//       // Sync to cloud for authenticated users
+//       if (ctx && isAuthenticated(ctx)) {
+//         const updatedSession = sessions[existingIndex];
+//         withRetry(
+//           () =>
+//             ctx.dispatch(
+//               updateSessionThunk({
+//                 id: sessionId,
+//                 sessionData: {
+//                   totalXPReceived: updatedSession.totalXPReceived,
+//                 },
+//               }),
+//             ) as unknown as Promise<unknown>,
+//         ).catch(() => {
+//           showNetworkError(
+//             "Failed to sync session XP. Please check your connection.",
+//           );
+//         });
+//       }
+//     } else {
+//       console.warn(`Session ${sessionId} not found in practice history`);
+//     }
+//   } catch (error) {
+//     console.error("Error updating session XP:", error);
+//   }
+// }
 
 /**
  * Debug function to check localStorage content

@@ -446,18 +446,6 @@ export function MigrationChecker() {
           preferences: userData.preferences,
         });
 
-        if (dbEmpty) {
-          // DB has no data — show the initial import prompt if localStorage has data
-          if (!localStorageHasData()) {
-            // Nothing to do — stamp so we don't re-check for 5 days
-            if (userId) stampSyncCheck(userId);
-            return;
-          }
-          // Don't stamp here — we want to re-check after migration completes
-          setShowPrompt(true);
-          return;
-        }
-
         // DB already has data — check if localStorage has new/different data
         if (!localStorageHasData()) {
           if (userId) stampSyncCheck(userId);

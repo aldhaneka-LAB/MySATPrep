@@ -342,7 +342,7 @@ function SidebarHeader({
 }: React.ComponentProps<"div">) {
   const { isMobile, state, open, openMobile, setOpenMobile } = useSidebar();
 
-  console.log("open", open);
+  // console.log("open", open);
   return (
     <div
       data-slot="sidebar-header"

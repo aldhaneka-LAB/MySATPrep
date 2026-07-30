@@ -29,7 +29,6 @@ export {
   setStatistics,
   updateStatistics,
   setSessions,
-  addSession,
   updateSession,
   updateSessionThunk,
   removeSession,

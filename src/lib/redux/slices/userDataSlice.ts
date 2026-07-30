@@ -1004,6 +1004,8 @@ export const syncLocalStorageData = createAsyncThunk<
       return result;
     })();
 
+
+
     // Sessions: union by sessionId
     const mergedSessions = (() => {
       const sessionMap = new Map();
@@ -1014,6 +1016,8 @@ export const syncLocalStorageData = createAsyncThunk<
       }
       return Array.from(sessionMap.values());
     })();
+
+
 
     // Bookmarks: union by questionId
     const mergedBookmarks = (() => {

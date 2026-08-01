@@ -163,7 +163,7 @@ export default function Tracker() {
     if (state.activeAssessmentId) {
       fetchInitialData();
     } else {
-      // Reset state if no assessment is selected
+      // Reset state if no assessment is selected.
       dispatch({ type: "RESET" });
     }
   }, [state.activeAssessmentId]);

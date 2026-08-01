@@ -9,7 +9,7 @@ export const assessmentWorkspaces: AssessmentWorkspace[] = Object.entries(
   Assessments,
 ).map(([key, assessment]) => ({
   id: assessment.id.toString(),
-  name: assessment.text,
+  name: key,
   logo: `https://avatar.vercel.sh/${key.toLowerCase()}`,
   plan: "Assessment",
   assessmentId: assessment.id,

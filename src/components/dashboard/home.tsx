@@ -236,6 +236,9 @@ export function HomeTab({ selectedAssessment }: HomeTabProps) {
     serverTotalTimeMs,
     serverSuccessRate,
   ]);
+
+  console.log("selectedAssessment", selectedAssessment);
+
   return (
     <div className="space-y-4 grid grid-cols-7">
       <div className="px-4 col-span-7 md:col-span-4 xl:col-span-5 space-y-4">

@@ -94,7 +94,7 @@ export default function SummaryCharts({
   /** Pass Redux statistics for authenticated users; omit to fall back to localStorage. */
   statistics?: PracticeStatistics;
 }) {
-  console.log("statistics", statistics);
+  // console.log("statistics", statistics);
   const router = useRouter();
   const fallbackStats = useResolvedPracticeStatistics();
 

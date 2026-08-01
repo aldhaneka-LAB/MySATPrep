@@ -2061,7 +2061,7 @@ export default function PracticeRushMultistep({
     async (selections: PracticeSelections) => {
       // Prevent multiple simultaneous calls
       if (isFetchingRef.current) {
-        console.log("⏳ FetchQuestions already in progress, skipping...");
+        console.log(" FetchQuestions already in progress, skipping...");
         return;
       }
 
@@ -2072,7 +2072,7 @@ export default function PracticeRushMultistep({
         state.questions.length > 0
       ) {
         console.log(
-          "🔍 Review mode: Questions already loaded in state, skipping fetch",
+          " Review mode: Questions already loaded in state, skipping fetch",
         );
         return;
       }
@@ -2080,7 +2080,7 @@ export default function PracticeRushMultistep({
       isFetchingRef.current = true;
 
       try {
-        console.log("Selections : ", selections);
+        // console.log("Selections : ", selections);
 
         let lookupData: LookupRequest | undefined = state.lookupData;
         const lookupResponse = await fetch("/api/lookup")
@@ -2101,7 +2101,7 @@ export default function PracticeRushMultistep({
             return {} as { data?: LookupRequest; success?: boolean };
           });
 
-        console.log("lookupResponse", lookupResponse);
+        // console.log("lookupResponse", lookupResponse);
         if ("data" in lookupResponse) {
           lookupData = lookupResponse.data ?? undefined;
           console.log("lookupData", lookupData);
@@ -2114,9 +2114,9 @@ export default function PracticeRushMultistep({
         // Handle review mode - only fetch previously answered questions
         // This includes: explicit review mode OR sessions with COMPLETED status
         if (effectiveReviewMode && restoredSessionData) {
-          console.log(
-            "🔍 Review mode detected - loading only answered questions...",
-          );
+          // console.log(
+          //   "🔍 Review mode detected - loading only answered questions...",
+          // );
 
           const answeredQuestionDetails =
             restoredSessionData.answeredQuestionDetails || [];
@@ -2124,12 +2124,12 @@ export default function PracticeRushMultistep({
             restoredSessionData.questionAnswers || {},
           );
 
-          console.log("📊 Review session details:", {
-            sessionId: restoredSessionData.sessionId,
-            status: restoredSessionData.status,
-            totalAnswered: answeredQuestionIds.length,
-            detailsCount: answeredQuestionDetails.length,
-          });
+          // console.log(" Review session details:", {
+          //   sessionId: restoredSessionData.sessionId,
+          //   status: restoredSessionData.status,
+          //   totalAnswered: answeredQuestionIds.length,
+          //   detailsCount: answeredQuestionDetails.length,
+          // });
 
           if (
             answeredQuestionDetails.length === 0 &&
@@ -2186,7 +2186,7 @@ export default function PracticeRushMultistep({
             dispatch({ type: "SET_CURRENT_STEP", payload: 4 });
 
             // Restore the session state including answers and timing data
-            console.log("🔄 Restoring review session state...");
+            // console.log(" Restoring review session state...");
 
             // Dispatch restored session data for review
             dispatch({
@@ -2210,7 +2210,7 @@ export default function PracticeRushMultistep({
             dispatch({ type: "SET_CURRENT_STEP", payload: 5 });
 
             // Don't start timer in review mode
-            console.log("✅ Review session loaded - questions are read-only");
+            // console.log(" Review session loaded - questions are read-only");
 
             const answeredCount = Object.keys(
               restoredSessionData.questionAnswers || {},
@@ -2229,7 +2229,7 @@ export default function PracticeRushMultistep({
               );
             }).length;
 
-            toast.success("Review Session Loaded! 👁️", {
+            toast.success("Review Session Loaded! ", {
               description: `Reviewing ${answeredCount} answered questions (${correctAnswers} correct). Answers are read-only.`,
               duration: 6000,
             });
@@ -2248,7 +2248,7 @@ export default function PracticeRushMultistep({
 
         // Normal flow for new sessions or when no restored data is available
         console.log(
-          "🔄 No restored session data found, fetching from /api/get-questions...",
+          " No restored session data found, fetching from /api/get-questions...",
         );
 
         let excludeQuestionsIds: string[] = [];
@@ -2369,9 +2369,9 @@ export default function PracticeRushMultistep({
             // sonner
           }
 
-          console.log(
-            `selections.excludeBluebook ${selections.excludeBluebook} : ${questionsData.length}`,
-          );
+          // console.log(
+          //   `selections.excludeBluebook ${selections.excludeBluebook} : ${questionsData.length}`,
+          // );
 
           dispatch({
             type: "SET_QUESTIONS_DATA",
@@ -2396,13 +2396,13 @@ export default function PracticeRushMultistep({
           restoredSessionData?.answeredQuestionDetails &&
           restoredSessionData.answeredQuestionDetails.length > 0
         ) {
-          console.log("🔄 Restoring session from restored session data...");
+          // console.log("🔄 Restoring session from restored session data...");
 
           const questionDetails = restoredSessionData.answeredQuestionDetails;
-          console.log(
-            "Restoring previously answered questions:",
-            questionDetails,
-          );
+          // console.log(
+          //   "Restoring previously answered questions:",
+          //   questionDetails,
+          // );
 
           dispatch({ type: "SET_CURRENT_STEP", payload: 3 });
 
@@ -2450,7 +2450,7 @@ export default function PracticeRushMultistep({
             dispatch({ type: "SET_CURRENT_STEP", payload: 4 });
 
             // Restore the session state including answers and timing data
-            console.log("🔄 Restoring session state...");
+            console.log(" Restoring session state...");
 
             // Extract answers and times from the restored session data
             const restoredAnswers = restoredSessionData.questionAnswers || {};
@@ -2474,8 +2474,8 @@ export default function PracticeRushMultistep({
               },
             });
 
-            console.log("✅ Session state restored successfully");
-            console.log("📊 Restored session summary:", {
+            console.log(" Session state restored successfully");
+            console.log(" Restored session summary:", {
               answeredQuestions: Object.keys(restoredAnswers).length,
               totalTimeSpent: Object.values(restoredTimes).reduce(
                 (sum, time) => sum + time,
@@ -2489,7 +2489,7 @@ export default function PracticeRushMultistep({
             const restoredSelections = restoredSessionData.practiceSelections;
 
             console.log(
-              "🔄 Fetching new questions with restored selections...",
+              " Fetching new questions with restored selections...",
               restoredSelections,
             );
 
@@ -2497,7 +2497,7 @@ export default function PracticeRushMultistep({
 
             if (questionsData.length > 0) {
               console.log(
-                `✅ Fetched ${questionsData.length} new questions to add to restored session`,
+                ` Fetched ${questionsData.length} new questions to add to restored session`,
               );
 
               // Use the helper function to process new questions and combine with restored ones
@@ -2508,7 +2508,7 @@ export default function PracticeRushMultistep({
               );
 
               console.log(
-                `✅ Total questions after combining restored + new: ${finalQuestions.length}`,
+                ` Total questions after combining restored + new: ${finalQuestions.length}`,
               );
             } else {
               console.log(
@@ -2534,9 +2534,7 @@ export default function PracticeRushMultistep({
             dispatch({ type: "SET_CURRENT_STEP", payload: 5 });
 
             // Don't start timer immediately - user is reviewing restored session
-            console.log(
-              "🎯 Session restored - user can review previous answers",
-            );
+            console.log(" Session restored - user can review previous answers");
 
             // Show a toast to inform user about restored session
             const answeredCount = Object.keys(restoredAnswers).length;
@@ -2553,7 +2551,7 @@ export default function PracticeRushMultistep({
               },
             ).length;
 
-            toast.success("Session Restored Successfully! 🎯", {
+            toast.success("Session Restored Successfully! ", {
               description: `Restored ${answeredCount} previously answered questions (${correctAnswers} correct). You can review your answers and continue practicing.`,
               duration: 8000,
             });
@@ -2612,7 +2610,7 @@ export default function PracticeRushMultistep({
 
         if (questionsData) {
           console.log(
-            "✅ Successfully fetched questions data from API, caching for future use",
+            " Successfully fetched questions data from API, caching for future use",
           );
 
           dispatch({ type: "SET_CURRENT_STEP", payload: 3 });

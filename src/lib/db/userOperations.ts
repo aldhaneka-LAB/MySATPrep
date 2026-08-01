@@ -379,6 +379,120 @@ export async function updatePracticeStatistics(
   } as unknown as PracticeStatistics;
 }
 
+/**
+ * Delta interface – only the fields that changed need to be provided.
+ * Fields that are undefined are not touched on the existing row.
+ */
+export interface PracticeStatisticsDelta {
+  answeredQuestions?: string[];
+  answeredQuestionsDetailed?: AnsweredQuestion[];
+  statistics?: ClassStatistics;
+}
+
+/**
+ * Merge a delta (partial statistics update) into the existing row for a user
+ * and assessment. Only the fields present in the delta are merged; absent
+ * fields leave the existing data untouched.
+ *
+ * Merge rules (same as updatePracticeStatistics):
+ *   - answeredQuestions        : union (deduplicated)
+ *   - answeredQuestionsDetailed: union by questionId (incoming wins on dupe)
+ *   - statistics               : deep-merge by domain → skill → questionId
+ *                                (incoming wins at the leaf level)
+ *
+ * Strips plainQuestion from both JSONB columns before writing.
+ *
+ * Validates: Requirement 8.2
+ */
+export async function updatePracticeStatisticsDelta(
+  userId: string,
+  assessment: string,
+  delta: PracticeStatisticsDelta,
+): Promise<PracticeStatistics> {
+  // ── Fetch existing row ─────────────────────────────────────────────────────
+  const existingStats = await getPracticeStatistics(userId, assessment);
+  const existingAssessment = existingStats?.[assessment];
+
+  // ── answeredQuestions ──────────────────────────────────────────────────────
+  const existingAnsweredQs = existingAssessment?.answeredQuestions ?? [];
+  const mergedAnsweredQuestions =
+    delta.answeredQuestions !== undefined
+      ? [...new Set([...existingAnsweredQs, ...delta.answeredQuestions])]
+      : existingAnsweredQs;
+
+  // ── answeredQuestionsDetailed ──────────────────────────────────────────────
+  const existingDetailed =
+    existingAssessment?.answeredQuestionsDetailed ?? ([] as AnsweredQuestion[]);
+  let mergedDetailed: AnsweredQuestion[];
+  if (delta.answeredQuestionsDetailed !== undefined) {
+    const detailedMap = new Map<string, AnsweredQuestion>();
+    for (const entry of existingDetailed) {
+      detailedMap.set(entry.questionId, entry);
+    }
+    for (const entry of delta.answeredQuestionsDetailed) {
+      detailedMap.set(entry.questionId, entry);
+    }
+    mergedDetailed = Array.from(detailedMap.values());
+  } else {
+    mergedDetailed = existingDetailed;
+  }
+
+  // ── statistics ─────────────────────────────────────────────────────────────
+  const existingStatsCls = (existingAssessment?.statistics ??
+    {}) as ClassStatistics;
+  let mergedStats: ClassStatistics;
+  if (delta.statistics !== undefined) {
+    mergedStats = { ...existingStatsCls };
+    for (const domain of Object.keys(delta.statistics)) {
+      mergedStats[domain] = { ...(mergedStats[domain] ?? {}) };
+      for (const skill of Object.keys(delta.statistics[domain])) {
+        mergedStats[domain][skill] = {
+          ...(mergedStats[domain][skill] ?? {}),
+          ...delta.statistics[domain][skill],
+        };
+      }
+    }
+  } else {
+    mergedStats = existingStatsCls;
+  }
+
+  // ── Strip plainQuestion before writing ────────────────────────────────────
+  const strippedDetailed = stripAnsweredQuestionsDetailed(
+    mergedDetailed as AnsweredQuestion[],
+  );
+  const strippedStats = stripClassStatistics(mergedStats as ClassStatistics);
+
+  const result = await pool.query<DbPracticeStatistics>(
+    `INSERT INTO practice_statistics
+       (user_id, assessment, answered_questions, answered_questions_detailed, statistics)
+     VALUES ($1, $2, $3, $4, $5)
+     ON CONFLICT (user_id, assessment) DO UPDATE SET
+       answered_questions          = EXCLUDED.answered_questions,
+       answered_questions_detailed = EXCLUDED.answered_questions_detailed,
+       statistics                  = EXCLUDED.statistics,
+       updated_at                  = CURRENT_TIMESTAMP
+     RETURNING
+       user_id                      AS "userId",
+       assessment,
+       answered_questions           AS "answeredQuestions",
+       answered_questions_detailed  AS "answeredQuestionsDetailed",
+       statistics,
+       updated_at                   AS "updatedAt"`,
+    [
+      userId,
+      assessment,
+      JSON.stringify(mergedAnsweredQuestions),
+      JSON.stringify(strippedDetailed),
+      JSON.stringify(strippedStats),
+    ],
+  );
+
+  const row = result.rows[0];
+  return {
+    [assessment]: rowToAssessmentStats(row),
+  } as unknown as PracticeStatistics;
+}
+
 // ─── Practice Sessions ────────────────────────────────────────────────────────
 
 import {

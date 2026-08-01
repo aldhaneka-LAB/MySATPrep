@@ -432,24 +432,53 @@ export default function Tracker() {
       };
     });
 
+    console.log("stats", stats);
     return {
       stats,
       totalQuestions: questionsState.allQuestions.length,
-      totalAnswered: answeredQuestionIds.size,
-      correctAnswers,
-      incorrectAnswers,
-      overallPercentage:
-        questionsState.allQuestions.length > 0
-          ? Math.round(
-              (answeredQuestionIds.size / questionsState.allQuestions.length) *
-                100,
-            )
-          : 0,
+      totalAnswered: (() => {
+        const allTasks = [...(mathTasks ?? []), ...(rwTasks ?? [])];
+        const allQuestions = allTasks
+          .flatMap((t) => t.subtasks)
+          .flatMap((s) => s.questions)
+          .filter((q): q is NonNullable<typeof q> => q != null);
+        return allQuestions.filter((q) => q.status !== "pending").length;
+      })(),
+      correctAnswers: (() => {
+        const allTasks = [...(mathTasks ?? []), ...(rwTasks ?? [])];
+        const allQuestions = allTasks
+          .flatMap((t) => t.subtasks)
+          .flatMap((s) => s.questions)
+          .filter((q): q is NonNullable<typeof q> => q != null);
+        return allQuestions.filter((q) => q.status === "completed").length;
+      })(),
+      incorrectAnswers: (() => {
+        const allTasks = [...(mathTasks ?? []), ...(rwTasks ?? [])];
+        const allQuestions = allTasks
+          .flatMap((t) => t.subtasks)
+          .flatMap((s) => s.questions)
+          .filter((q): q is NonNullable<typeof q> => q != null);
+        return allQuestions.filter((q) => q.status === "incorrect").length;
+      })(),
+      overallPercentage: (() => {
+        const allTasks = [...(mathTasks ?? []), ...(rwTasks ?? [])];
+        const allQuestions = allTasks
+          .flatMap((t) => t.subtasks)
+          .flatMap((s) => s.questions)
+          .filter((q): q is NonNullable<typeof q> => q != null);
+        const total = allQuestions.length;
+        const answered = allQuestions.filter(
+          (q) => q.status !== "pending",
+        ).length;
+        return total > 0 ? Math.round((answered / total) * 100) : 0;
+      })(),
     };
   }, [
     questionsState.allQuestions,
     state.activeAssessmentId,
     practiceStatistics,
+    mathTasks,
+    rwTasks,
   ]);
   // Show loading state for the entire component
   if (questionsState.loading) {

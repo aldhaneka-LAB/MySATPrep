@@ -1149,32 +1149,34 @@ export function QuestionResults({
               value={
                 state.onlyBluebookQuestions
                   ? "bluebook-only"
-                  : state.onlyStudentQBQuestions
-                    ? "studentqb-only"
-                    : "all"
+                  : // : state.onlyStudentQBQuestions
+                    //   ? "studentqb-only"
+                    //
+                    "all"
               }
               onValueChange={(value) => {
                 dispatch({
                   type: "TOGGLE_ONLY_BLUEBOOK",
                   payload: value === "bluebook-only",
                 });
-                dispatch({
-                  type: "TOGGLE_ONLY_STUDENT_QB",
-                  payload: value === "studentqb-only",
-                });
+                // dispatch({
+                //   type: "TOGGLE_ONLY_STUDENT_QB",
+                //   payload: value === "studentqb-only",
+                // });
               }}
-              className="group rounded-full p-2 relative inline-grid grid-cols-[1fr_1fr_1fr] items-center gap-3 text-sm font-medium after:absolute after:inset-y-0 after:w-[calc(33.333%)] after:rounded-full after:bg-blue-500 after:text-white after:shadow-sm after:shadow-black/5 after:outline-offset-2 after:transition-transform after:duration-300 after:[transition-timing-function:cubic-bezier(0.16,1,0.3,1)] has-[:focus-visible]:after:outline has-[:focus-visible]:after:outline-2 has-[:focus-visible]:after:outline-ring/70 data-[state=all]:after:translate-x-0 data-[state=bluebook-only]:after:translate-x-full data-[state=studentqb-only]:after:translate-x-[200%]"
+              className="group rounded-full p-2 relative inline-grid grid-cols-[1fr_1fr] items-center gap-3 text-sm font-medium after:absolute after:inset-y-0 after:w-[calc(50%)] after:rounded-full after:bg-blue-500 after:text-white after:shadow-sm after:shadow-black/5 after:outline-offset-2 after:transition-transform after:duration-300 after:[transition-timing-function:cubic-bezier(0.16,1,0.3,1)] has-[:focus-visible]:after:outline has-[:focus-visible]:after:outline-2 has-[:focus-visible]:after:outline-ring/70 data-[state=all]:after:translate-x-0 data-[state=bluebook-only]:after:translate-x-full"
               data-state={
                 state.onlyBluebookQuestions
                   ? "bluebook-only"
-                  : state.onlyStudentQBQuestions
-                    ? "studentqb-only"
-                    : "all"
+                  : // : state.onlyStudentQBQuestions
+                    //   ? "studentqb-only"
+
+                    "all"
               }
             >
               <label
                 className={`relative z-10 inline-flex h-full cursor-pointer select-none items-center justify-center whitespace-nowrap space-x-1 transition-colors ${
-                  !state.onlyBluebookQuestions && !state.onlyStudentQBQuestions
+                  !state.onlyBluebookQuestions
                     ? "text-neutral-50"
                     : "text-neutral-400"
                 }`}
@@ -1200,7 +1202,7 @@ export function QuestionResults({
                   className="sr-only"
                 />
               </label>
-              <label
+              {/* <label
                 className={`relative z-10 inline-flex h-full cursor-pointer select-none items-center justify-center whitespace-nowrap space-x-1 transition-colors ${
                   state.onlyStudentQBQuestions
                     ? "text-neutral-50"
@@ -1213,7 +1215,7 @@ export function QuestionResults({
                   value="studentqb-only"
                   className="sr-only"
                 />
-              </label>
+              </label> */}
             </RadioGroup>
           </div>
           <div className="border-2 border-gray-200 rounded-full p-1 mt-2">

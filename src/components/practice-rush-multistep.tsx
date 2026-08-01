@@ -3009,7 +3009,7 @@ export default function PracticeRushMultistep({
                   external_id:
                     currentQuestion.plainQuestion.external_id || undefined,
                   ibn: currentQuestion.plainQuestion.ibn || undefined,
-                  plainQuestion: currentQuestion.plainQuestion, // Include in statistic as well
+                  // plainQuestion: currentQuestion.plainQuestion, // Include in statistic as well
                 },
               },
               { dispatch: reduxDispatch, state: reduxState },

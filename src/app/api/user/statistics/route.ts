@@ -11,7 +11,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import { statisticsCache, getCacheKey } from "@/lib/cache";
-import { updatePracticeStatistics } from "@/lib/db/userOperations";
+import { updatePracticeStatisticsDelta } from "@/lib/db/userOperations";
 import { logError } from "@/lib/utils/errorLogger";
 import type { PracticeStatistics, AssessmentStatistics } from "@/types";
 
@@ -77,15 +77,26 @@ function isClassStatistics(value: unknown): boolean {
   return true;
 }
 
+// Delta payload: only the fields that were actually provided
+interface StatisticsDelta {
+  answeredQuestions?: string[];
+  answeredQuestionsDetailed?: AssessmentStatistics["answeredQuestionsDetailed"];
+  statistics?: AssessmentStatistics["statistics"];
+}
+
 /**
- * Validate and coerce the request body into a safe statistics payload.
+ * Validate and coerce the request body into a safe statistics delta.
+ * Only the fields present in the request body are included in the delta —
+ * absent fields are not defaulted to empty arrays/objects, so the DB merge
+ * operation won't overwrite existing data with empty values.
+ *
  * Returns { valid: false, error } on validation failure.
  */
 function validateStatisticsPayload(body: unknown):
   | {
       valid: true;
       assessment: ValidAssessment;
-      data: PracticeStatistics;
+      delta: StatisticsDelta;
     }
   | {
       valid: false;
@@ -109,8 +120,7 @@ function validateStatisticsPayload(body: unknown):
   }
   const assessment = payload.assessment as ValidAssessment;
 
-  // Build the AssessmentStatistics object from the remaining fields
-  const assessmentData: Partial<AssessmentStatistics> = {};
+  const delta: StatisticsDelta = {};
   let hasField = false;
 
   // answeredQuestions – array of string IDs
@@ -121,7 +131,7 @@ function validateStatisticsPayload(body: unknown):
         error: "answeredQuestions must be an array of strings",
       };
     }
-    assessmentData.answeredQuestions = payload.answeredQuestions;
+    delta.answeredQuestions = payload.answeredQuestions;
     hasField = true;
   }
 
@@ -134,7 +144,7 @@ function validateStatisticsPayload(body: unknown):
           "answeredQuestionsDetailed must be an array of valid AnsweredQuestion objects",
       };
     }
-    assessmentData.answeredQuestionsDetailed =
+    delta.answeredQuestionsDetailed =
       payload.answeredQuestionsDetailed as AssessmentStatistics["answeredQuestionsDetailed"];
     hasField = true;
   }
@@ -147,8 +157,7 @@ function validateStatisticsPayload(body: unknown):
         error: "statistics must be a valid ClassStatistics object",
       };
     }
-    assessmentData.statistics =
-      payload.statistics as AssessmentStatistics["statistics"];
+    delta.statistics = payload.statistics as AssessmentStatistics["statistics"];
     hasField = true;
   }
 
@@ -160,16 +169,7 @@ function validateStatisticsPayload(body: unknown):
     };
   }
 
-  // Build the full PracticeStatistics shape expected by updatePracticeStatistics
-  const data: PracticeStatistics = {
-    [assessment]: {
-      answeredQuestions: assessmentData.answeredQuestions ?? [],
-      answeredQuestionsDetailed: assessmentData.answeredQuestionsDetailed ?? [],
-      statistics: assessmentData.statistics ?? {},
-    },
-  };
-
-  return { valid: true, assessment, data };
+  return { valid: true, assessment, delta };
 }
 
 export async function PUT(request: NextRequest) {
@@ -204,14 +204,14 @@ export async function PUT(request: NextRequest) {
     );
   }
 
-  const { assessment, data } = validation;
+  const { assessment, delta } = validation;
 
   try {
-    // Update practice_statistics table
-    const updatedStatistics = await updatePracticeStatistics(
+    // Merge delta into the existing row – only the provided fields are touched
+    const updatedStatistics = await updatePracticeStatisticsDelta(
       userId,
       assessment,
-      data,
+      delta,
     );
 
     // Requirement 8.12 – invalidate statistics cache after successful update

@@ -51,19 +51,18 @@ function isAuthenticated(ctx: SyncContext): boolean {
 }
 
 /**
- * Sync the full statistics object to the cloud for authenticated users.
+ * Sync only the delta for a single answered question to the cloud.
+ * Sends just the one new/updated entry rather than the full statistics blob.
  * Fires-and-forgets with retry; errors surface as a toast notification.
  */
 function syncStatisticsToCloud(
-  statistics: PracticeStatistics,
+  delta: PracticeStatistics,
   ctx: SyncContext,
 ): void {
   if (!isAuthenticated(ctx)) return;
   withRetry(
     () =>
-      ctx.dispatch(
-        updateUserStatistics(statistics),
-      ) as unknown as Promise<unknown>,
+      ctx.dispatch(updateUserStatistics(delta)) as unknown as Promise<unknown>,
   ).catch(() => {
     showNetworkError(
       "Failed to save statistics. Please check your connection.",
@@ -199,7 +198,7 @@ export function addQuestionStatistic(
     ...entry.statistic,
     external_id: entry.external_id,
     ibn: entry.ibn,
-    plainQuestion: entry.plainQuestion,
+    // plainQuestion: entry.plainQuestion,
   };
 
   assessmentStats.statistics[entry.primaryClassCd][entry.skillCd][
@@ -209,8 +208,25 @@ export function addQuestionStatistic(
   // Save back to localStorage
   savePracticeStatistics(statistics);
 
-  // Sync to cloud for authenticated users
-  if (ctx) syncStatisticsToCloud(statistics, ctx);
+  // Sync only the delta for this single question to the cloud.
+  // The server merges incoming data with the existing row, so there is no
+  // need to send the entire statistics blob on every answered question.
+  if (ctx) {
+    const delta: PracticeStatistics = {
+      [entry.assessment]: {
+        answeredQuestions: [entry.questionId],
+        answeredQuestionsDetailed: [answeredQuestion],
+        statistics: {
+          [entry.primaryClassCd]: {
+            [entry.skillCd]: {
+              [entry.questionId]: statisticWithIds,
+            },
+          },
+        },
+      },
+    };
+    syncStatisticsToCloud(delta, ctx);
+  }
 }
 
 /**

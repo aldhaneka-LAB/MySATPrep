@@ -349,6 +349,19 @@ export function QuestionResults({
     answerStatus: "all",
   });
 
+  // Snapshot answeredQuestions at the moment the answerStatus filter is
+  // activated (or changed). This prevents already-visible cards from
+  // disappearing mid-session when the user answers a question while the
+  // "Not Answered" (or "Answered") filter is active.
+  // The snapshot refreshes only when the user explicitly changes the filter
+  // mode — not on every answer submission.
+  const answeredQuestionsSnapshotRef = useRef<string[]>(answeredQuestions);
+  const prevAnswerStatusRef = useRef(state.answerStatus);
+  if (state.answerStatus !== prevAnswerStatusRef.current) {
+    prevAnswerStatusRef.current = state.answerStatus;
+    answeredQuestionsSnapshotRef.current = answeredQuestions;
+  }
+
   // Memoized filtered questions that includes Bluebook filtering
   const actualFilteredQuestions = useMemo(() => {
     // console.log("answeredQuestions", answeredQuestions);
@@ -365,7 +378,7 @@ export function QuestionResults({
       selectedSubject,
       studentQBQuestionIds,
       state.answerStatus,
-      answeredQuestions,
+      answeredQuestionsSnapshotRef.current,
     );
 
     // Debug logging
@@ -405,7 +418,7 @@ export function QuestionResults({
     bluebookExternalIds,
     selectedSubject,
     studentQBQuestionIds,
-    answeredQuestions,
+    answeredQuestionsSnapshotRef.current,
   ]);
 
   // Memoized callback for requesting more questions in single view

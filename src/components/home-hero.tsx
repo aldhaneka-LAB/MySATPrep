@@ -61,7 +61,7 @@ export function HeroSection() {
               //   ...transitionVariants,
               // }}
               >
-                <ContinuePracticeRushButton />
+                {/* <ContinuePracticeRushButton /> */}
 
                 <h1 className="text-balance text-4xl font-medium sm:text-5xl md:text-6xl">
                   Free SAT® Practice Platform
@@ -69,7 +69,8 @@ export function HeroSection() {
 
                 <p className="mx-auto mt-6 max-w-2xl text-pretty text-lg">
                   Level up your digital SAT® prep with thousands of practice
-                  questions originally from the College Board Educator Question Bank.
+                  questions originally from the College Board Educator Question
+                  Bank.
                 </p>
 
                 <motion.div

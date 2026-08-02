@@ -2224,23 +2224,25 @@ const userDataSlice = createSlice({
       });
 
     // ── updateVocabPracticePerformanceThunk ──────────────────────────────────
+    // NOTE: This is a background *save* — it must NOT toggle loading.vocabPracticePerformance.
+    // Toggling that flag causes VocabsPracticePageClient to re-render and
+    // unmount the active practice session every time an answer is saved.
     builder
-      .addCase(updateVocabPracticePerformanceThunk.pending, (state) => {
-        state.loading.vocabPracticePerformance = true;
-        state.error = null;
+      .addCase(updateVocabPracticePerformanceThunk.pending, (_state) => {
+        // intentionally not setting loading flag — background save
       })
       .addCase(
         updateVocabPracticePerformanceThunk.fulfilled,
         (state, action) => {
+          // Update the data silently — no loading flag change
           state.vocabPracticePerformance = action.payload;
-          state.loading.vocabPracticePerformance = false;
           state.error = null;
         },
       )
       .addCase(
         updateVocabPracticePerformanceThunk.rejected,
         (state, action) => {
-          state.loading.vocabPracticePerformance = false;
+          // Don't set loading flag — just record the error silently
           state.error = action.payload as string;
         },
       );

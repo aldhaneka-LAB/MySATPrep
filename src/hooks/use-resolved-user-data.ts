@@ -1,8 +1,10 @@
 "use client";
 
 import { useCallback, useMemo, useState, useEffect, useRef } from "react";
+import { useStore } from "react-redux";
 import { useLocalStorage } from "@/lib/useLocalStorage";
 import { useAppDispatch, useAppSelector } from "@/lib/redux/hooks";
+import type { RootState } from "@/lib/redux/store";
 import {
   selectIsAuthenticated,
   selectUserStatistics,
@@ -140,7 +142,7 @@ export function usePracticeStatisticsState(): [
   const isAuthenticated = useAppSelector(selectIsAuthenticated);
   const reduxStatistics = useAppSelector(selectUserStatistics);
   const dispatch = useAppDispatch();
-  const reduxState = useAppSelector((s) => s);
+  const store = useStore<RootState>();
   const [localStats, setLocalStats] = useLocalStorage<PracticeStatistics>(
     "practiceStatistics",
     {},
@@ -161,12 +163,12 @@ export function usePracticeStatisticsState(): [
 
       if (isAuthenticated) {
         dispatch(updateStatistics(newValue));
-        saveUserStatistics(newValue, dispatch, reduxState);
+        saveUserStatistics(newValue, dispatch, store.getState());
       } else {
         setLocalStats(newValue);
       }
     },
-    [isAuthenticated, practiceStatistics, dispatch, reduxState, setLocalStats],
+    [isAuthenticated, practiceStatistics, dispatch, store, setLocalStats],
   );
 
   return [practiceStatistics, setPracticeStatistics];
@@ -287,7 +289,7 @@ export function useResolvedVocabsData(): [
   const isAuthenticated = useAppSelector(selectIsAuthenticated);
   const reduxVocabulary = useAppSelector(selectUserVocabulary);
   const dispatch = useAppDispatch();
-  const reduxState = useAppSelector((s) => s);
+  const store = useStore<RootState>();
 
   const [localData, setLocalData] = useLocalStorage<VocabsData>(
     "vocabsData",
@@ -306,12 +308,12 @@ export function useResolvedVocabsData(): [
 
       if (isAuthenticated) {
         dispatch(updateVocabulary(newValue));
-        saveVocabulary(newValue, dispatch, reduxState);
+        saveVocabulary(newValue, dispatch, store.getState());
       } else {
         setLocalData(newValue);
       }
     },
-    [isAuthenticated, vocabsData, dispatch, reduxState, setLocalData],
+    [isAuthenticated, vocabsData, dispatch, store, setLocalData],
   );
 
   return [vocabsData, setVocabsData];
@@ -349,7 +351,7 @@ export function useResolvedPracticePerformanceData(): [
   const isAuthenticated = useAppSelector(selectIsAuthenticated);
   const reduxPerformance = useAppSelector(selectVocabPracticePerformance);
   const dispatch = useAppDispatch();
-  const reduxState = useAppSelector((s) => s);
+  const store = useStore<RootState>();
 
   const [localData, setLocalData] = useLocalStorage<PracticePerformanceData>(
     "practicePerformanceData",
@@ -370,17 +372,21 @@ export function useResolvedPracticePerformanceData(): [
         | PracticePerformanceData
         | ((val: PracticePerformanceData) => PracticePerformanceData),
     ) => {
-      const newValue =
-        value instanceof Function ? value(practicePerformance) : value;
-
       if (isAuthenticated) {
-        // Use debounced save — practice components call this on every answer
-        debouncedSavePracticePerformance(newValue, dispatch, reduxState);
+        // Read the latest value from the store to avoid stale closure issues
+        // (multiple answers in quick succession would otherwise use the same base)
+        const latest =
+          store.getState().userData.vocabPracticePerformance ??
+          DEFAULT_PRACTICE_PERFORMANCE;
+        const newValue = value instanceof Function ? value(latest) : value;
+        debouncedSavePracticePerformance(newValue, dispatch, store.getState());
       } else {
+        const newValue =
+          value instanceof Function ? value(practicePerformance) : value;
         setLocalData(newValue);
       }
     },
-    [isAuthenticated, practicePerformance, dispatch, reduxState, setLocalData],
+    [isAuthenticated, practicePerformance, dispatch, store, setLocalData],
   );
 
   return [practicePerformance, setPracticePerformance];

@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useReducer, useEffect, useMemo } from "react";
+import React, { useReducer, useEffect, useMemo, useRef } from "react";
 import {
   useResolvedVocabsData,
   useResolvedPracticePerformanceData,
@@ -204,6 +204,17 @@ export default function VocabsFillinTheBlankPractice({
   const [practicePerformance, setPracticePerformance] =
     useResolvedPracticePerformanceData();
 
+  // Capture wordPerformance snapshot at mount (and on restart) so that
+  // answering questions doesn't regenerate/reshuffle the question list mid-session.
+  const wordPerformanceSnapshotRef = useRef(
+    practicePerformance.wordPerformance,
+  );
+  const prevRestartKeyRef = useRef(quizState.restartKey);
+  if (quizState.restartKey !== prevRestartKeyRef.current) {
+    prevRestartKeyRef.current = quizState.restartKey;
+    wordPerformanceSnapshotRef.current = practicePerformance.wordPerformance;
+  }
+
   // Get learned vocabulary words
   const learnedWords = useMemo(() => {
     return vocabs_database.filter((word) =>
@@ -235,7 +246,7 @@ export default function VocabsFillinTheBlankPractice({
     };
 
     learnedWords.forEach((word) => {
-      const performance = practicePerformance.wordPerformance[word.word];
+      const performance = wordPerformanceSnapshotRef.current[word.word];
 
       if (!performance) {
         categorizedWords.notPracticed.push(word);
@@ -409,7 +420,7 @@ export default function VocabsFillinTheBlankPractice({
       });
   }, [
     learnedWords,
-    practicePerformance.wordPerformance,
+    wordPerformanceSnapshotRef.current,
     vocabsData.userSentences,
     quizState.restartKey,
   ]);

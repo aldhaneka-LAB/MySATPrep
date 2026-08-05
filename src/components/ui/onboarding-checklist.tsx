@@ -22,6 +22,8 @@ export type Step = {
   completed?: boolean;
   biggerZIndex?: boolean;
   requirePreviousStep?: boolean;
+  /** Preferred position of the tooltip relative to the highlighted element. Defaults to "auto". */
+  tooltipPosition?: "top" | "bottom" | "left" | "right" | "auto";
 };
 
 export interface InteractiveOnboardingChecklistProps {
@@ -220,28 +222,43 @@ const CoachmarkOverlay = ({
           const onboardingCardWidth = 320;
           const onboardingCardHeight = 400;
 
-          const positions = [
+          // Candidate positions ordered by priority: bottom, top, right, left
+          const allPositions = [
             {
+              id: "bottom" as const,
               top: top + height + margin,
               left: left + width / 2 - cardWidth / 2,
               priority: 1,
             },
             {
+              id: "top" as const,
               top: top - cardHeight - margin,
               left: left + width / 2 - cardWidth / 2,
               priority: 2,
             },
             {
+              id: "right" as const,
               top: top + height / 2 - cardHeight / 2,
               left: left + width + margin,
               priority: 3,
             },
             {
+              id: "left" as const,
               top: top + height / 2 - cardHeight / 2,
               left: left - cardWidth - margin,
               priority: 4,
             },
           ];
+
+          // If a preferred position is set, reorder so that preference is tried first
+          const preferredPos = step.tooltipPosition;
+          const positions =
+            preferredPos && preferredPos !== "auto"
+              ? [
+                  ...allPositions.filter((p) => p.id === preferredPos),
+                  ...allPositions.filter((p) => p.id !== preferredPos),
+                ]
+              : allPositions;
 
           const bestPosition = positions
             .map((pos) => ({
@@ -263,8 +280,7 @@ const CoachmarkOverlay = ({
                 pos.fitsHorizontally &&
                 pos.fitsVertically &&
                 !pos.overlapsOnboarding,
-            )
-            .sort((a, b) => a.priority - b.priority)[0];
+            )[0];
 
           if (bestPosition) {
             return {
@@ -273,8 +289,14 @@ const CoachmarkOverlay = ({
             };
           }
 
-          let fallbackTop = top + height + margin;
-          let fallbackLeft = left + width / 2 - cardWidth / 2;
+          // Fallback: use preferred position if set, otherwise bottom
+          const fallbackBase =
+            preferredPos && preferredPos !== "auto"
+              ? allPositions.find((p) => p.id === preferredPos)!
+              : allPositions[0];
+
+          let fallbackTop = fallbackBase.top;
+          let fallbackLeft = fallbackBase.left;
 
           fallbackLeft = Math.max(
             margin,

@@ -6,8 +6,15 @@
 .dark .answer-option img {
   filter: invert(100%);
 }
+.dark .answer-option figure {
+  filter: invert(100%);
+}
 
 .dark #question_explanation img {
+  filter: invert(100%);
+}
+
+.dark #question_explanation figure {
   filter: invert(100%);
 }
 

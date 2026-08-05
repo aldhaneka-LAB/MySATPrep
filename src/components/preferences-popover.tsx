@@ -225,14 +225,14 @@ export function FloatingPreferencesButton() {
         </div>
 
         {/* Footer */}
-        <div className="border-t border-border px-4 py-2.5 rounded-b-2xl">
+        {/* <div className="border-t border-border px-4 py-2.5 rounded-b-2xl">
           <a
             href="/dashboard/preferences"
             className="text-xs text-muted-foreground hover:text-foreground transition-colors hover:underline underline-offset-2"
           >
             All preferences →
           </a>
-        </div>
+        </div> */}
       </div>
 
       {/* Floating trigger button */}

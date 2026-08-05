@@ -241,6 +241,7 @@ export function QuestionResults({
         "Filter questions by difficulty level. Now try select at least 2 difficulty levels.",
       targetSelector: "[data-onboard='select-difficulties']",
       completed: tourState.completedSteps.has("welcome"),
+      tooltipPosition: "top",
     },
     {
       id: "skills",
@@ -249,6 +250,7 @@ export function QuestionResults({
         "Filter the questions by specific skills or topics to find the most relevant ones. Now try select at least 3 topics.",
       targetSelector: "[data-onboard='select-skills']",
       completed: tourState.completedSteps.has("skills"),
+      tooltipPosition: "top",
     },
 
     {
@@ -1006,7 +1008,7 @@ export function QuestionResults({
             }}
           >
             <SelectTrigger
-              className="bg-white h-full"
+              className="h-full"
               icon={ClockFadingIcon}
               data-onboard="time-sort"
             >

@@ -27,11 +27,11 @@ const selectTriggerVariants = cva(
       variant: "default",
       size: "default",
     },
-  }
+  },
 );
 
 const selectContentVariants = cva(
-  "relative z-50 max-h-[300px] min-w-[8rem] overflow-hidden rounded-lg border border-border bg-background text-foreground shadow-lg data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0 data-[state=closed]:zoom-out-95 data-[state=open]:zoom-in-95 data-[side=bottom]:slide-in-from-top-2 data-[side=left]:slide-in-from-right-2 data-[side=right]:slide-in-from-left-2 data-[side=top]:slide-in-from-bottom-2",
+  "relative z-[350] max-h-[300px] min-w-[8rem] overflow-hidden rounded-lg border border-border bg-background text-foreground shadow-lg data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0 data-[state=closed]:zoom-out-95 data-[state=open]:zoom-in-95 data-[side=bottom]:slide-in-from-top-2 data-[side=left]:slide-in-from-right-2 data-[side=right]:slide-in-from-left-2 data-[side=top]:slide-in-from-bottom-2",
   {
     variants: {
       position: {
@@ -43,7 +43,7 @@ const selectContentVariants = cva(
     defaultVariants: {
       position: "popper",
     },
-  }
+  },
 );
 
 const Select = SelectPrimitive.Root;
@@ -70,7 +70,8 @@ const SelectValue = React.forwardRef<
 SelectValue.displayName = SelectPrimitive.Value.displayName;
 
 interface SelectTriggerProps
-  extends React.ComponentPropsWithoutRef<typeof SelectPrimitive.Trigger>,
+  extends
+    React.ComponentPropsWithoutRef<typeof SelectPrimitive.Trigger>,
     VariantProps<typeof selectTriggerVariants> {
   icon?: LucideIcon;
   placeholder?: string;
@@ -82,14 +83,14 @@ const SelectTrigger = React.forwardRef<
 >(
   (
     { className, children, variant, size, icon: Icon, placeholder, ...props },
-    ref
+    ref,
   ) => (
     <SelectPrimitive.Trigger
       ref={ref}
       className={cn(
         "group",
         selectTriggerVariants({ variant, size }),
-        className
+        className,
       )}
       {...props}
     >
@@ -104,12 +105,13 @@ const SelectTrigger = React.forwardRef<
         />
       </SelectPrimitive.Icon>
     </SelectPrimitive.Trigger>
-  )
+  ),
 );
 SelectTrigger.displayName = SelectPrimitive.Trigger.displayName;
 
-interface SelectContentProps
-  extends React.ComponentPropsWithoutRef<typeof SelectPrimitive.Content> {
+interface SelectContentProps extends React.ComponentPropsWithoutRef<
+  typeof SelectPrimitive.Content
+> {
   position?: "popper" | "item-aligned";
 }
 
@@ -134,7 +136,7 @@ const SelectContent = React.forwardRef<
           className={cn(
             "p-2 max-h-[280px] overflow-y-auto scrollbar-thin scrollbar-thumb-border scrollbar-track-transparent",
             position === "popper" &&
-              "h-fit w-full min-w-[var(--radix-select-trigger-width)]"
+              "h-fit w-full min-w-[var(--radix-select-trigger-width)]",
           )}
         >
           {children}
@@ -153,15 +155,16 @@ const SelectLabel = React.forwardRef<
     ref={ref}
     className={cn(
       "px-3 py-2 text-xs font-semibold text-muted-foreground",
-      className
+      className,
     )}
     {...props}
   />
 ));
 SelectLabel.displayName = SelectPrimitive.Label.displayName;
 
-interface SelectItemProps
-  extends React.ComponentPropsWithoutRef<typeof SelectPrimitive.Item> {
+interface SelectItemProps extends React.ComponentPropsWithoutRef<
+  typeof SelectPrimitive.Item
+> {
   icon?: LucideIcon;
 }
 
@@ -173,7 +176,7 @@ const SelectItem = React.forwardRef<
     ref={ref}
     className={cn(
       "relative flex w-full cursor-default select-none items-center rounded-lg py-2 pl-3 pr-8 text-sm outline-none focus:bg-accent focus:text-accent-foreground data-[disabled]:pointer-events-none data-[disabled]:opacity-50 data-[disabled]:text-muted-foreground",
-      className
+      className,
     )}
     {...props}
   >

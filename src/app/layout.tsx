@@ -198,11 +198,11 @@ export default function RootLayout({
           <AnnouncementBanner
             className="bg-white dark:bg-transparent"
             announcements={[
-              // {
-              //   id: "banner-vocabs-update",
-              //   content:
-              //     "You can now",
-              // },
+              {
+                id: "fix-dark-mode",
+                content:
+                  "We just fixed dark mode! You can now activate it on bottom right.",
+              },
               {
                 id: "banner-bug-fix-update",
                 content:

@@ -20,7 +20,12 @@ import {
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 
-import { Torus } from "lucide-react";
+import {
+  BadgeInfoIcon,
+  BookCopyIcon,
+  HeartHandshake,
+  Torus,
+} from "lucide-react";
 
 // Constants
 export const TOUR_STEP_IDS = {
@@ -396,7 +401,7 @@ export function TourAlertDialog({
                 scale: 1,
                 filter: "blur(0px)",
                 y: [0, -8, 0],
-                rotate: [42, 48, 42],
+                rotate: [0, 6, 0],
               }}
               transition={{
                 duration: 0.4,
@@ -413,7 +418,7 @@ export function TourAlertDialog({
                 },
               }}
             >
-              <Torus className="size-32 stroke-1 text-primary" />
+              <BookCopyIcon className="size-32 stroke-1 text-primary" />
             </motion.div>
           </div>
           <AlertDialogTitle className="text-center text-xl font-medium">

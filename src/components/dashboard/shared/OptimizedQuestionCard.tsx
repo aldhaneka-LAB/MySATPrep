@@ -4,7 +4,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader } from "@/components/ui/card-v2";
 import { Separator } from "../../ui/separator";
 import { Badge } from "../../ui/badge";
-import QuestionProblemCard from "@/components/question-problem-card";
+import QuestionProblemCard from "@/components/question-problem-card-2";
 import { QuestionById_Data } from "@/types/question";
 import { StatusBadge } from "@/components/ui/status-badge";
 import { ClockAlertIcon, EyeClosedIcon, ShieldAlertIcon } from "lucide-react";
@@ -81,7 +81,7 @@ interface OptimizedQuestionCardProps {
 
 // Type guard to check if question is answered type
 const isAnsweredQuestion = (
-  question: BaseQuestionWithData | AnsweredQuestionWithData
+  question: BaseQuestionWithData | AnsweredQuestionWithData,
 ): question is AnsweredQuestionWithData => {
   return (
     "isCorrect" in question &&
@@ -115,7 +115,7 @@ export const OptimizedQuestionCard = memo(
         {
           rootMargin: "100px", // Load when 100px before entering viewport
           threshold: 0.1,
-        }
+        },
       );
 
       if (cardRef.current) {
@@ -253,7 +253,7 @@ export const OptimizedQuestionCard = memo(
                     leftIcon={ClockAlertIcon}
                     leftLabel="Created At"
                     rightLabel={formatUnixTimestamp(
-                      question.questionData.question.createDate
+                      question.questionData.question.createDate,
                     )}
                     status="success"
                     className="mb-3 "
@@ -276,7 +276,7 @@ export const OptimizedQuestionCard = memo(
     }
 
     return <div ref={cardRef} />;
-  }
+  },
 );
 
 OptimizedQuestionCard.displayName = "OptimizedQuestionCard";

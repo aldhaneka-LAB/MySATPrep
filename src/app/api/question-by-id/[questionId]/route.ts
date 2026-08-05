@@ -70,7 +70,7 @@ export async function GET(
         (q) => q.questionId === questionId,
       );
 
-      console.log("questionData", questionData);
+      // console.log("questionData", questionData);
       // console.log(
       //   `Fetched  ${questionsData.length} questions for assessment: ${
       //     assessmentData.text

@@ -16,7 +16,11 @@ export async function GET(req: NextRequest) {
         POSTGRES_URL: process.env.POSTGRES_URL,
         POSTGRES_URL_NON_POOLING: process.env.POSTGRES_URL_NON_POOLING,
         DATABASE_URL_UNPOOLED: process.env.DATABASE_URL_UNPOOLED,
+        BETTER_AUTH_SECRET: process.env.BETTER_AUTH_SECRET,
+        GOOGLE_CLIENT_ID: process.env.GOOGLE_CLIENT_ID,
+        GOOGLE_CLIENT_SECRET: process.env.GOOGLE_CLIENT_SECRET,
       });
+      // return new NextResponse("Invalid");
     }
   }
 

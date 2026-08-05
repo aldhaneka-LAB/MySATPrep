@@ -104,10 +104,21 @@ const checkAnswerValidity = (
   if (!userAnswer || !correctAnswers || correctAnswers.length === 0)
     return false;
 
-  if (Number(userAnswer)) {
-    return correctAnswers
-      .map((e) => Number(new Fraction(e)) || e)
-      .includes(Number(new Fraction(userAnswer)) || userAnswer);
+  // Try fraction/numeric comparison if the answer is a number or fraction (e.g. "3/4", "0.75", "-2")
+  const isNumericOrFraction = /^-?\d+([./]\d+)?$/.test(userAnswer.trim());
+  if (isNumericOrFraction) {
+    try {
+      const userDecimal = Number(new Fraction(userAnswer.trim()));
+      return correctAnswers.some((e) => {
+        try {
+          return Number(new Fraction(e.trim())) === userDecimal;
+        } catch {
+          return e.trim().toLowerCase() === userAnswer.trim().toLowerCase();
+        }
+      });
+    } catch {
+      // Fall through to string comparison if Fraction parsing fails
+    }
   }
 
   return correctAnswers.map((a) => a.trim()).includes(userAnswer.trim());

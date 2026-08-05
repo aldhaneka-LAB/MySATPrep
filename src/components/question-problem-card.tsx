@@ -59,10 +59,26 @@ const checkAnswerValidity = (
   if (!userAnswer || !correctAnswers || correctAnswers.length === 0)
     return false;
 
-  if (Number(userAnswer)) {
-    return correctAnswers
-      .map((e) => Number(new Fraction(String(e))) || String(e))
-      .includes(Number(new Fraction(userAnswer)) || userAnswer);
+  // Try fraction/numeric comparison if the answer is a number or fraction (e.g. "3/4", "0.75", "2")
+  const isNumericOrFraction = /^-?\d+([./]\d+)?$/.test(userAnswer.trim());
+  if (isNumericOrFraction) {
+    try {
+      const userFraction = new Fraction(userAnswer.trim());
+      const userDecimal = Number(userFraction);
+
+      return correctAnswers.some((e) => {
+        try {
+          const correctFraction = new Fraction(String(e));
+          return Number(correctFraction) === userDecimal;
+        } catch {
+          return (
+            String(e).trim().toLowerCase() === userAnswer.trim().toLowerCase()
+          );
+        }
+      });
+    } catch {
+      // Fall through to string comparison if Fraction parsing fails
+    }
   }
 
   return correctAnswers
@@ -428,7 +444,7 @@ const QuestionProblemCard = React.memo(function QuestionProblemCard({
         setQuestionNotes(updatedNotes);
         setCurrentNote(noteText);
         setHasNote(true);
-        console.log("Note saved successfully!");
+        // console.log("Note saved successfully!");
       } catch (error) {
         console.error("Failed to save note:", error);
       }
@@ -466,6 +482,8 @@ const QuestionProblemCard = React.memo(function QuestionProblemCard({
       } else if (isAnswerChecked || isQuestionAnswered) {
         return;
       }
+
+      // console.log("handleTextInputChange value ", value);
       setSelectedAnswer(value);
     },
     [answerVisibility, isAnswerChecked, isQuestionAnswered],
@@ -505,16 +523,16 @@ const QuestionProblemCard = React.memo(function QuestionProblemCard({
 
         setAnswerChoiceHistory(updatedHistory);
 
-        console.log("Question answered and saved to answerChoiceHistory:", {
-          questionId,
-          selectedAnswer: answer,
-          isCorrect,
-          assessment,
-          questionType: question.problem.answerOptions
-            ? "multiple-choice"
-            : "text-input",
-          updatedHistory: updatedHistory[questionId],
-        });
+        // console.log("Question answered and saved to answerChoiceHistory:", {
+        //   questionId,
+        //   selectedAnswer: answer,
+        //   isCorrect,
+        //   assessment,
+        //   questionType: question.problem.answerOptions
+        //     ? "multiple-choice"
+        //     : "text-input",
+        //   updatedHistory: updatedHistory[questionId],
+        // });
       } else {
         // Handle saving with new generalized function from practiceStatistics
         addQuestionStatistic(
@@ -538,15 +556,15 @@ const QuestionProblemCard = React.memo(function QuestionProblemCard({
         );
 
         // Debug logging
-        console.log("Question answered and saved using addQuestionStatistic:", {
-          questionId,
-          selectedAnswer: answer,
-          isCorrect,
-          assessment,
-          questionType: question.problem.answerOptions
-            ? "multiple-choice"
-            : "text-input",
-        });
+        // console.log("Question answered and saved using addQuestionStatistic:", {
+        //   questionId,
+        //   selectedAnswer: answer,
+        //   isCorrect,
+        //   assessment,
+        //   questionType: question.problem.answerOptions
+        //     ? "multiple-choice"
+        //     : "text-input",
+        // });
       }
 
       // Update local state

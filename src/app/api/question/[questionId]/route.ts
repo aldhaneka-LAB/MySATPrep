@@ -7,7 +7,7 @@ export async function GET(
   request: NextRequest,
   { params }: { params: Promise<{ questionId: string }> },
 ) {
-  console.log(" QUESTION ID");
+  // console.log(" QUESTION ID");
 
   const { questionId } = await params;
 

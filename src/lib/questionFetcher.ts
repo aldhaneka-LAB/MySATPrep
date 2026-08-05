@@ -112,6 +112,7 @@ function findCorrectChoiceOrAnswerOnIBNQuestion(
     );
 
     if (eitherOrMatch) {
+      console.log("eitherOrMatch");
       return [eitherOrMatch[1].toUpperCase(), eitherOrMatch[2].toUpperCase()];
     }
 

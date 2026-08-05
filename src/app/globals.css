@@ -3,6 +3,14 @@
 
 @custom-variant dark (&:is(.dark *));
 
+.dark .answer-option img {
+  filter: invert(100%);
+}
+
+.dark #question_explanation img {
+  filter: invert(100%);
+}
+
 @theme inline {
   --color-destructive-foreground: var(--destructive-foreground);
   --color-color-destructive-foreground: var(----color-destructive-foreground);

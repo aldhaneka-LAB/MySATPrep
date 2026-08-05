@@ -57,7 +57,7 @@ export async function POST(req: Request) {
 
   try {
     const result = await generateText({
-      model: openrouter.chat("z-ai/glm-4.5-air:free"),
+      model: openrouter.chat("nvidia/nemotron-3-ultra-550b-a55b:free"),
       system: system,
       prompt: message,
     });

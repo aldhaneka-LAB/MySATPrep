@@ -28,6 +28,7 @@ const nextConfig: NextConfig = {
       new URL("https://vectorseek.com/**"),
       new URL("https://assets.dub.co/**"),
       new URL("https://raw.githubusercontent.com/**"),
+      new URL("https://support.khanacademy.org/**"),
     ],
   },
 };

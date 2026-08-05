@@ -21,6 +21,7 @@ import { SessionInitializer } from "@/components/auth/SessionInitializer";
 import { MigrationChecker } from "@/components/auth/MigrationChecker";
 import { ErrorBoundary } from "@/components/ErrorBoundary";
 import { ThemeApplier } from "@/components/ThemeApplier";
+import { FloatingPreferencesButton } from "@/components/preferences-popover";
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -223,6 +224,7 @@ export default function RootLayout({
                 <SessionInitializer />
                 <MigrationChecker />
                 <AuthSessionProvider>{children}</AuthSessionProvider>
+                <FloatingPreferencesButton />
               </ReduxProvider>
             </MathJaxContext>
           </AssessmentProvider>

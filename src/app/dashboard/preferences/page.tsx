@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useEffect, useState } from "react";
+import { useStore } from "react-redux";
 import { useAppDispatch, useAppSelector } from "@/lib/redux/hooks";
 import {
   selectUserPreferences,
@@ -9,6 +10,7 @@ import {
 import { debouncedSavePreferences } from "@/lib/utils/dataSync";
 import { updatePreferences } from "@/lib/redux/slices/userDataSlice";
 import type { UserPreferences } from "@/lib/types/userData";
+import type { RootState } from "@/lib/redux/store";
 
 import { Card, CardContent } from "@/components/ui/card";
 import { Label } from "@/components/ui/label";
@@ -120,7 +122,7 @@ export default function PreferencesPage() {
   const dispatch = useAppDispatch();
   const isAuthenticated = useAppSelector(selectIsAuthenticated);
   const reduxPrefs = useAppSelector(selectUserPreferences);
-  const reduxState = useAppSelector((s) => s);
+  const store = useStore<RootState>();
 
   // Resolve initial values — Redux for authenticated users, localStorage otherwise
   const resolveInitial = <T extends string>(
@@ -201,7 +203,7 @@ export default function PreferencesPage() {
       ...patch,
     };
     dispatch(updatePreferences(next));
-    debouncedSavePreferences(next, dispatch, reduxState);
+    debouncedSavePreferences(next, dispatch, store.getState());
   };
 
   const handleThemeChange = (value: string) => {

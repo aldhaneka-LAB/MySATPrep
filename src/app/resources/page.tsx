@@ -60,7 +60,7 @@ export const metadata: Metadata = {
 export default function Page() {
   return (
     <React.Fragment>
-      <SiteHeader />;
+      <SiteHeader />
       <ResourceSection />
       <FooterSection />
     </React.Fragment>

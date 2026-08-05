@@ -10,18 +10,20 @@ import { debouncedSavePreferences } from "@/lib/utils/dataSync";
 import { updatePreferences } from "@/lib/redux/slices/userDataSlice";
 import type { UserPreferences } from "@/lib/types/userData";
 
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent } from "@/components/ui/card";
 import { Label } from "@/components/ui/label";
 import { Separator } from "@/components/ui/separator";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
+import { Switch } from "@/components/ui/switch";
 import { Badge } from "@/components/ui/badge";
 import {
   SunIcon,
   MoonIcon,
   CloudIcon,
   HardDriveIcon,
-  GraduationCapIcon,
   CheckIcon,
+  Volume2Icon,
+  VolumeXIcon,
 } from "lucide-react";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -151,6 +153,21 @@ export default function PreferencesPage() {
   const [assessment, setAssessment] = useState<Assessment>(() =>
     resolveInitial<Assessment>("assessment", "SAT"),
   );
+  const [soundEnabled, setSoundEnabled] = useState<boolean>(() => {
+    if (reduxPrefs?.soundEnabled !== undefined) return reduxPrefs.soundEnabled;
+    if (typeof window !== "undefined") {
+      try {
+        const raw = localStorage.getItem("userPreferences");
+        if (raw) {
+          const parsed: UserPreferences = JSON.parse(raw);
+          if (parsed.soundEnabled !== undefined) return parsed.soundEnabled;
+        }
+      } catch {
+        // ignore
+      }
+    }
+    return true; // default: sound on
+  });
 
   // Sync from Redux when it loads (e.g. after auth)
   useEffect(() => {
@@ -159,6 +176,8 @@ export default function PreferencesPage() {
     if (reduxPrefs.data_mode_priority)
       setDataMode(reduxPrefs.data_mode_priority);
     if (reduxPrefs.assessment) setAssessment(reduxPrefs.assessment);
+    if (reduxPrefs.soundEnabled !== undefined)
+      setSoundEnabled(reduxPrefs.soundEnabled);
   }, [reduxPrefs]);
 
   // Apply theme to <html> element
@@ -178,6 +197,7 @@ export default function PreferencesPage() {
       theme,
       data_mode_priority: dataMode,
       assessment,
+      soundEnabled,
       ...patch,
     };
     dispatch(updatePreferences(next));
@@ -200,6 +220,11 @@ export default function PreferencesPage() {
     const a = value as Assessment;
     setAssessment(a);
     persist({ assessment: a });
+  };
+
+  const handleSoundToggle = (enabled: boolean) => {
+    setSoundEnabled(enabled);
+    persist({ soundEnabled: enabled });
   };
 
   return (
@@ -313,6 +338,52 @@ export default function PreferencesPage() {
               </PreferenceSection>
             </div>
           )}
+
+          {/* ── Sound ── */}
+          <div className="p-6">
+            <PreferenceSection
+              title="Sound Effects"
+              description="Play sounds for interactions like answering questions and navigation."
+            >
+              <div className="flex items-center justify-between rounded-xl border border-border bg-card px-4 py-3">
+                <div className="flex items-center gap-3">
+                  <span
+                    className={`flex h-8 w-8 items-center justify-center rounded-lg ${
+                      soundEnabled
+                        ? "bg-primary/10 text-primary"
+                        : "bg-muted text-muted-foreground"
+                    }`}
+                    aria-hidden="true"
+                  >
+                    {soundEnabled ? (
+                      <Volume2Icon className="h-4 w-4" />
+                    ) : (
+                      <VolumeXIcon className="h-4 w-4" />
+                    )}
+                  </span>
+                  <div>
+                    <Label
+                      htmlFor="sound-toggle"
+                      className="text-sm font-medium cursor-pointer"
+                    >
+                      {soundEnabled ? "Sound On" : "Sound Off"}
+                    </Label>
+                    <p className="text-xs text-muted-foreground">
+                      {soundEnabled
+                        ? "Sound effects are enabled."
+                        : "All sound effects are muted."}
+                    </p>
+                  </div>
+                </div>
+                <Switch
+                  id="sound-toggle"
+                  checked={soundEnabled}
+                  onCheckedChange={handleSoundToggle}
+                  aria-label="Toggle sound effects"
+                />
+              </div>
+            </PreferenceSection>
+          </div>
         </CardContent>
       </Card>
     </section>

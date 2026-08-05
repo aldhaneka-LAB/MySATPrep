@@ -420,7 +420,6 @@ export default function SummaryCharts({
               </ChartContainer>
             ) : (
               <EmptyState
-                theme={"light"}
                 className=" border-0"
                 title="No Data Available"
                 description="Start practice to view your reading & writing skills."
@@ -546,7 +545,6 @@ export default function SummaryCharts({
               </ChartContainer>
             ) : (
               <EmptyState
-                theme={"light"}
                 className=" border-0 z-0"
                 title="No Data Available"
                 description="Start practice to view your maths skills."
@@ -607,7 +605,7 @@ export default function SummaryCharts({
                                   {skill.correctAnswers +
                                     skill.incorrectAnswers}
                                 </span>
-                                <span className="font-semibold text-blue-600">
+                                <span className="font-semibold text-blue-600 dark:text-blue-400">
                                   {percentage}%
                                 </span>
                               </div>
@@ -622,7 +620,6 @@ export default function SummaryCharts({
               )
             ) : (
               <EmptyState
-                theme={"light"}
                 className=" border-0 z-0"
                 title="No Reading & Writing Data Available"
                 description="Start practice to view your Reading & Writing skills insights."
@@ -671,17 +668,17 @@ export default function SummaryCharts({
                         return (
                           <div key={index} className="space-y-2">
                             <div className="flex items-center justify-between text-sm">
-                              <span className="font-medium text-gray-700">
+                              <span className="font-medium text-foreground">
                                 {skillCdsObjectData[skill.text]?.text ||
                                   skill.text}
                               </span>
                               <div className="flex items-center gap-2">
-                                <span className="text-gray-600">
+                                <span className="text-muted-foreground">
                                   {skill.correctAnswers}/
                                   {skill.correctAnswers +
                                     skill.incorrectAnswers}
                                 </span>
-                                <span className="font-semibold text-blue-600">
+                                <span className="font-semibold text-blue-600 dark:text-blue-400">
                                   {percentage}%
                                 </span>
                               </div>
@@ -696,7 +693,6 @@ export default function SummaryCharts({
               )
             ) : (
               <EmptyState
-                theme={"light"}
                 className=" border-0 z-0"
                 title="No Math Data Available"
                 description="Start practice to view your Math skills insights."

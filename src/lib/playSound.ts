@@ -1,19 +1,34 @@
 // Sound utility function
-const AUDIO_CACHE_NAME = 'audio-cache-v1';
+const AUDIO_CACHE_NAME = "audio-cache-v1";
 const objectUrlCache: Record<string, string> = {};
 
+/** Returns true if sound is currently enabled (checks localStorage preference). */
+export const isSoundEnabled = (): boolean => {
+  if (typeof window === "undefined") return true;
+  try {
+    const raw = localStorage.getItem("userPreferences");
+    if (!raw) return true;
+    const prefs = JSON.parse(raw) as { soundEnabled?: boolean };
+    // Default to enabled if the key is absent
+    return prefs.soundEnabled !== false;
+  } catch {
+    return true;
+  }
+};
+
 export const playSound = async (soundFile: string) => {
+  if (!isSoundEnabled()) return;
   try {
     const audioUrl = `/assets/audio/${soundFile}`;
     let finalUrl = audioUrl;
 
     if (objectUrlCache[audioUrl]) {
       finalUrl = objectUrlCache[audioUrl];
-    } else if (typeof window !== 'undefined' && 'caches' in window) {
+    } else if (typeof window !== "undefined" && "caches" in window) {
       try {
         const cache = await caches.open(AUDIO_CACHE_NAME);
         let response = await cache.match(audioUrl);
-        
+
         if (!response) {
           response = await fetch(audioUrl);
           if (response.ok) {

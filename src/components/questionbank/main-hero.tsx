@@ -600,7 +600,6 @@ export function QB_MainHero() {
                             <BookOpenCheckIcon />,
                             <PencilRuler />,
                           ]}
-                          theme={"light"}
                         />
                       </motion.div>
                       {/* Welcome message */}
@@ -611,10 +610,10 @@ export function QB_MainHero() {
                           transition={{ duration: 0.3 }}
                           className="flex flex-col items-center"
                         >
-                          <h1 className="text-3xl font-bold bg-clip-text text-blue-500 mb-2">
+                          <h1 className="text-3xl font-bold bg-clip-text text-blue-500 dark:text-blue-400 mb-2">
                             SAT/PSAT Question Bank
                           </h1>
-                          <p className="text-gray-500 max-w-md">
+                          <p className="text-gray-500 dark:text-gray-400 max-w-md">
                             Search and explore a vast of SAT and PSAT questions
                             directly from Collegeboard question bank collections
                             to enhance your test preparation.
@@ -623,7 +622,7 @@ export function QB_MainHero() {
                       </div>
 
                       {/* Input area with integrated functions and file upload */}
-                      <div className="w-full bg-white border border-gray-200 rounded-xl shadow-sm overflow-hidden mb-4">
+                      <div className="w-full bg-white dark:bg-neutral-900 border border-gray-200 dark:border-neutral-700 rounded-xl shadow-sm overflow-hidden mb-4">
                         <motion.div
                           className="px-4 py-3 grid grid-cols-4 md:grid-cols-7 gap-3"
                           initial={{ opacity: 0, y: 30 }}
@@ -649,7 +648,7 @@ export function QB_MainHero() {
                               onValueChange={handleAssessmentChange}
                             >
                               <SelectTrigger
-                                className="bg-white h-full"
+                                className="bg-white dark:bg-neutral-900 h-full"
                                 icon={BookMarkedIcon}
                               >
                                 <SelectValue placeholder="Select Assessment" />
@@ -683,14 +682,14 @@ export function QB_MainHero() {
                             <TooltipProvider delayDuration={100}>
                               <Tooltip>
                                 <TooltipTrigger asChild>
-                                  <div className="bg-white h-full">
+                                  <div className="bg-white dark:bg-neutral-900 h-full">
                                     <Select
                                       value={state.selectedSubject}
                                       onValueChange={handleSubjectChange}
                                       disabled={!state.selectedAssessment}
                                     >
                                       <SelectTrigger
-                                        className="bg-white h-full"
+                                        className="bg-white dark:bg-neutral-900 h-full"
                                         icon={BookOpen}
                                       >
                                         <SelectValue
@@ -779,8 +778,8 @@ export function QB_MainHero() {
                         {/* Error Display */}
                         {state.error && (
                           <div className="px-4 py-2">
-                            <div className="bg-red-50 border border-red-200 rounded-lg p-3">
-                              <p className="text-red-700 text-sm">
+                            <div className="bg-red-50 dark:bg-red-950/40 border border-red-200 dark:border-red-800 rounded-lg p-3">
+                              <p className="text-red-700 dark:text-red-400 text-sm">
                                 {state.error}
                               </p>
                             </div>
@@ -826,9 +825,9 @@ export function QB_MainHero() {
                                 !state.selectedAssessment ||
                                 !state.selectedSubject ||
                                 state.selected.length === 0
-                                  ? "bg-gray-100 text-gray-500 cursor-not-allowed"
+                                  ? "bg-gray-100 dark:bg-neutral-800 text-gray-500 dark:text-neutral-500 cursor-not-allowed"
                                   : state.isLoading
-                                    ? "bg-gray-300 text-gray-600 cursor-not-allowed"
+                                    ? "bg-gray-300 dark:bg-neutral-700 text-gray-600 dark:text-neutral-400 cursor-not-allowed"
                                     : hasAppliedFilters() &&
                                         !hasFiltersChanged()
                                       ? "bg-gradient-to-b from-green-400 to-green-500 hover:from-green-500 hover:to-green-600 text-white shadow-[0_4px_0_0_theme(colors.green.600),0_8px_20px_theme(colors.green.500/0.25)] hover:shadow-[0_6px_0_0_theme(colors.green.700),0_10px_25px_theme(colors.green.500/0.3)] active:shadow-[0_2px_0_0_theme(colors.green.600),0_4px_10px_theme(colors.green.500/0.2)] active:translate-y-0.5"

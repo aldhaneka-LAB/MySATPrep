@@ -112,8 +112,8 @@ const IconContainer = memo(
         theme === "neutral" &&
           "bg-stone-100 border border-stone-200 group-hover:shadow-xl group-hover:border-stone-300",
         (!theme || theme === "light") &&
-          "bg-white border border-gray-200 group-hover:shadow-xl group-hover:border-gray-300",
-        className
+          "bg-white dark:bg-neutral-800 border border-gray-200 dark:border-neutral-700 group-hover:shadow-xl group-hover:border-gray-300 dark:group-hover:border-neutral-600",
+        className,
       )}
     >
       <div
@@ -122,13 +122,13 @@ const IconContainer = memo(
           theme === "dark" && "text-neutral-400 group-hover:text-neutral-200",
           theme === "neutral" && "text-stone-500 group-hover:text-stone-700",
           (!theme || theme === "light") &&
-            "text-gray-500 group-hover:text-gray-700"
+            "text-gray-500 dark:text-neutral-400 group-hover:text-gray-700 dark:group-hover:text-neutral-200",
         )}
       >
         {children}
       </div>
     </motion.div>
-  )
+  ),
 );
 IconContainer.displayName = "IconContainer";
 
@@ -157,7 +157,7 @@ export const MultiIconDisplay = memo(
         </IconContainer>
       </div>
     );
-  }
+  },
 );
 MultiIconDisplay.displayName = "MultiIconDisplay";
 
@@ -186,7 +186,7 @@ export const EmptyState = forwardRef<HTMLElement, EmptyStateProps>(
       className = "",
       ...props
     },
-    ref
+    ref,
   ) => {
     const titleId = useId();
     const descriptionId = useId();
@@ -204,20 +204,21 @@ export const EmptyState = forwardRef<HTMLElement, EmptyStateProps>(
       const variants: Record<Variant, Record<Theme, string>> = {
         default: {
           light:
-            "bg-white border-dashed border-2 border-gray-300 hover:border-gray-400 hover:bg-gray-50/50",
+            "bg-white dark:bg-neutral-900 border-dashed border-2 border-gray-300 dark:border-neutral-700 hover:border-gray-400 dark:hover:border-neutral-600 hover:bg-gray-50/50 dark:hover:bg-neutral-800/50",
           dark: "bg-neutral-900 border-dashed border-2 border-neutral-700 hover:border-neutral-600 hover:bg-neutral-800/50",
           neutral:
             "bg-stone-50 border-dashed border-2 border-stone-300 hover:border-stone-400 hover:bg-stone-100/50",
         },
         subtle: {
-          light: "bg-white border border-transparent hover:bg-gray-50/30",
+          light:
+            "bg-white dark:bg-neutral-900 border border-transparent hover:bg-gray-50/30 dark:hover:bg-neutral-800/30",
           dark: "bg-neutral-900 border border-transparent hover:bg-neutral-800/30",
           neutral:
             "bg-stone-50 border border-transparent hover:bg-stone-100/30",
         },
         error: {
           light:
-            "bg-white border border-red-200 bg-red-50/50 hover:bg-red-50/80",
+            "bg-white dark:bg-neutral-900 border border-red-200 dark:border-red-800 bg-red-50/50 dark:bg-red-950/50 hover:bg-red-50/80 dark:hover:bg-red-950/80",
           dark: "bg-neutral-900 border border-red-800 bg-red-950/50 hover:bg-red-950/80",
           neutral:
             "bg-stone-50 border border-red-300 bg-red-50/50 hover:bg-red-50/80",
@@ -229,7 +230,7 @@ export const EmptyState = forwardRef<HTMLElement, EmptyStateProps>(
     const getTextClasses = (
       type: "title" | "description",
       size: Size,
-      theme: Theme
+      theme: Theme,
     ) => {
       const sizes = {
         title: {
@@ -246,12 +247,12 @@ export const EmptyState = forwardRef<HTMLElement, EmptyStateProps>(
 
       const colors = {
         title: {
-          light: "text-gray-900",
+          light: "text-gray-900 dark:text-neutral-100",
           dark: "text-neutral-100",
           neutral: "text-stone-900",
         },
         description: {
-          light: "text-gray-600",
+          light: "text-gray-600 dark:text-neutral-400",
           dark: "text-neutral-400",
           neutral: "text-stone-600",
         },
@@ -260,7 +261,7 @@ export const EmptyState = forwardRef<HTMLElement, EmptyStateProps>(
       return cn(
         sizes[type][size],
         colors[type][theme],
-        "font-semibold transition-colors duration-200"
+        "font-semibold transition-colors duration-200",
       );
     };
 
@@ -272,7 +273,8 @@ export const EmptyState = forwardRef<HTMLElement, EmptyStateProps>(
       };
 
       const themeClasses = {
-        light: "border-gray-300 bg-white hover:bg-gray-50 text-gray-700",
+        light:
+          "border-gray-300 dark:border-neutral-600 bg-white dark:bg-neutral-800 hover:bg-gray-50 dark:hover:bg-neutral-700 text-gray-700 dark:text-neutral-200",
         dark: "border-neutral-600 bg-neutral-800 hover:bg-neutral-700 text-neutral-200",
         neutral:
           "border-stone-300 bg-stone-100 hover:bg-stone-200 text-stone-700",
@@ -281,7 +283,7 @@ export const EmptyState = forwardRef<HTMLElement, EmptyStateProps>(
       return cn(
         "cursor-pointer inline-flex items-center gap-2 border rounded-md font-medium shadow-sm hover:shadow-md transition-all duration-200 relative overflow-hidden group/button disabled:opacity-50 disabled:cursor-not-allowed",
         sizeClasses[size],
-        themeClasses[theme]
+        themeClasses[theme],
       );
     };
 
@@ -297,7 +299,7 @@ export const EmptyState = forwardRef<HTMLElement, EmptyStateProps>(
             baseClasses,
             sizeClasses[size],
             getVariantClasses(variant, theme),
-            className
+            className,
           )}
           initial="initial"
           animate="animate"
@@ -322,9 +324,9 @@ export const EmptyState = forwardRef<HTMLElement, EmptyStateProps>(
                   className={cn(
                     getTextClasses("description", size, theme).replace(
                       "font-semibold",
-                      ""
+                      "",
                     ),
-                    "max-w-md leading-relaxed"
+                    "max-w-md leading-relaxed",
                   )}
                 >
                   {description}
@@ -357,6 +359,6 @@ export const EmptyState = forwardRef<HTMLElement, EmptyStateProps>(
         </motion.section>
       </LazyMotion>
     );
-  }
+  },
 );
 EmptyState.displayName = "EmptyState";

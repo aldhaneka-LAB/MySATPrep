@@ -9,8 +9,10 @@ import type { Metadata } from "next";
 async function fetchQuestionById(
   questionId: string,
 ): Promise<QuestionById_Response> {
+  // console.log("fetchQuestionById", fetchQuestionById);
   const targetUrl = `${getInternalAPITargetURL()}/api/question-by-id/${questionId}`;
 
+  console.log("targetUrl", targetUrl);
   // console.log("Fetching question data from API route:", targetUrl);
   const response = await fetch(targetUrl, {
     cache: "force-cache",

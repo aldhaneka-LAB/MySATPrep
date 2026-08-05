@@ -14,6 +14,7 @@ export async function GET(
   request: NextRequest,
   { params }: { params: Promise<{ questionId: string }> },
 ): Promise<NextResponse> {
+  console.log("GET QUESTION BY ID");
   const { questionId } = await params;
 
   if (!questionId) {
@@ -68,6 +69,8 @@ export async function GET(
       const questionData = questionsData.find(
         (q) => q.questionId === questionId,
       );
+
+      // console.log("questionData", questionData);
       // console.log(
       //   `Fetched  ${questionsData.length} questions for assessment: ${
       //     assessmentData.text

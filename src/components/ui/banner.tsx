@@ -42,7 +42,7 @@ export function Banner({
   const [open, setOpen] = useState(true);
   const [alertOpen, setAlertOpen] = useState(true);
   const globalKey = id ? `banner-${id}` : undefined;
-  const alertKey = "testing-phase";
+  const alertKey = "new-cb-update";
 
   useEffect(() => {
     if (globalKey) setOpen(localStorage.getItem(globalKey) !== "true");
@@ -64,13 +64,13 @@ export function Banner({
       {alertOpen && (
         <Alert
           variant="default"
-          className="fixed z-20 left-5 bottom-5 max-w-md text-yellow-600"
+          className="fixed z-20 left-5 bottom-5 max-w-md text-blue-600"
         >
           <AlertCircleIcon />
-          <AlertTitle>This Deployment Is In Alpha Phase</AlertTitle>
-          <AlertDescription>
-            Any bug reports are appreciated. This deployment is intentional.
-          </AlertDescription>
+          <AlertTitle>
+            Collegeboard Just Released New Questions On July 31st
+          </AlertTitle>
+          <AlertDescription>Check it out on /questionbank!</AlertDescription>
           <button
             type="button"
             aria-label="Close Alert"
@@ -80,7 +80,7 @@ export function Banner({
                 variant: "ghost",
                 size: "sm",
               }),
-              "absolute top-2 right-2 h-6 w-6 p-0 text-yellow-600 hover:text-yellow-700",
+              "absolute top-2 right-2 h-6 w-6 p-0 text-blue-600 hover:text-blue-700",
             )}
           >
             <X className="h-3 w-3" />

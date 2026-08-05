@@ -10,7 +10,8 @@ import FooterSection from "@/components/footer";
 import { MathJaxContext } from "better-react-mathjax";
 
 import { Toaster } from "sonner";
-import { Banner, Banner2 } from "@/components/ui/banner";
+import { Banner } from "@/components/ui/banner";
+import { AnnouncementBanner } from "@/components/ui/announcement-banner";
 
 import { AssessmentProvider } from "@/contexts/assessment-context";
 import Dialog02 from "@/components/ui/popup-tour";
@@ -193,23 +194,26 @@ export default function RootLayout({
         /> */}
 
         <ErrorBoundary>
-          <Banner2
-            id="banner-sync-new-update"
-            variant="rainbow"
-            className=" bg-white dark:bg-transparent"
-            rainbowColors={[
-              "rgba(255,210,50,0.77)",
-              "rgba(255,210,50,0.77)",
-              "transparent",
-              "rgba(255,210,50,0.77)",
-              "transparent",
-              "rgba(255,210,50,0.77)",
-              "transparent",
+          <AnnouncementBanner
+            className="bg-white dark:bg-transparent"
+            announcements={[
+              // {
+              //   id: "banner-vocabs-update",
+              //   content:
+              //     "You can now",
+              // },
+              {
+                id: "banner-bug-fix-update",
+                content:
+                  "Bugs affecting unauthenticated users have been fixed — you may no longer need to log in. Bug reports welcome at /report-bug",
+              },
+              {
+                id: "banner-new-cb-questions",
+                content:
+                  "College Board just released new questions on July 31st — check them out on /questionbank!",
+              },
             ]}
-          >
-            Authentication is up and running. You can use the platform without
-            SignIn. Any bug reports are appreciated, report it on /report-bug .
-          </Banner2>
+          />
 
           <Banner />
           <AssessmentProvider>

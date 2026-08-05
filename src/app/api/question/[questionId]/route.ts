@@ -5,8 +5,10 @@ export const revalidate = 3600;
 
 export async function GET(
   request: NextRequest,
-  { params }: { params: Promise<{ questionId: string }> }
+  { params }: { params: Promise<{ questionId: string }> },
 ) {
+  console.log(" QUESTION ID");
+
   const { questionId } = await params;
 
   const result = await fetchQuestionData(questionId);
@@ -18,7 +20,7 @@ export async function GET(
         error: result.error,
         details: result.error,
       },
-      { status: result.status || 400 }
+      { status: result.status || 400 },
     );
   }
 
@@ -35,6 +37,6 @@ export async function GET(
         "CDN-Cache-Control": "public, s-maxage=60",
         "Vercel-CDN-Cache-Control": "public, s-maxage=3600",
       },
-    }
+    },
   );
 }

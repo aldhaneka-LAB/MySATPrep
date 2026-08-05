@@ -242,43 +242,6 @@ export async function fetchQuestionData(
     }
   }
 
-  if (withInternal) {
-    // Handle regular questions - try internal API first, then fall back to qbank-api
-    const internalApiUrl = getInternalAPITargetURL();
-
-    // Try internal API (Neon database) first
-    try {
-      const internalResponse = await fetch(
-        `${internalApiUrl}/api/student-qb/question/${questionId}`,
-        {
-          method: "GET",
-          headers: {
-            "Content-Type": "application/json",
-            Accept: "application/json",
-          },
-        },
-      );
-
-      if (internalResponse.ok) {
-        const internalData = (await internalResponse.json()) as {
-          success: boolean;
-          data?: API_Response_Question;
-        };
-        if (internalData.success && internalData.data) {
-          return {
-            success: true,
-            data: internalData.data,
-          };
-        }
-      }
-    } catch (internalError) {
-      console.warn(
-        "Internal API call failed, falling back to qbank-api:",
-        internalError,
-      );
-    }
-  }
-
   // Fall back to qbank-api
   const apiUrl =
     "https://qbank-api.collegeboard.org/msreportingquestionbank-prod/questionbank/digital/get-question";
@@ -367,6 +330,43 @@ export async function fetchQuestionData(
       status: lastErrorStatus,
     };
   } catch (error) {
+    if (withInternal) {
+      // Handle regular questions - try internal API first, then fall back to qbank-api
+      const internalApiUrl = getInternalAPITargetURL();
+
+      // Try internal API (Neon database) first
+      try {
+        const internalResponse = await fetch(
+          `${internalApiUrl}/api/student-qb/question/${questionId}`,
+          {
+            method: "GET",
+            headers: {
+              "Content-Type": "application/json",
+              Accept: "application/json",
+            },
+          },
+        );
+
+        if (internalResponse.ok) {
+          const internalData = (await internalResponse.json()) as {
+            success: boolean;
+            data?: API_Response_Question;
+          };
+          if (internalData.success && internalData.data) {
+            return {
+              success: true,
+              data: internalData.data,
+            };
+          }
+        }
+      } catch (internalError) {
+        console.warn(
+          "Internal API call failed, falling back to qbank-api:",
+          internalError,
+        );
+      }
+    }
+
     console.error("Error in fetching question:", error);
     return {
       success: false,

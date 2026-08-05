@@ -20,7 +20,7 @@ async function fetchQuestionById(
 
     signal: AbortSignal.timeout(30000),
   });
-  console.log("response", response);
+  // console.log("response", response);
 
   // console.log(d
   //   "Fetching question data from API route: DONE! Response:",
@@ -47,7 +47,7 @@ export async function generateMetadata({
   try {
     const result = await fetchQuestionById(questionId);
 
-    console.log("result", result);
+    // console.log("result", result);
 
     if (!result.data) {
       return {

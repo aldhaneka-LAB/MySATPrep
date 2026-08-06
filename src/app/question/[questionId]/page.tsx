@@ -27,7 +27,8 @@ async function fetchQuestionById(
   //   response,
   // );
 
-  if (!response.ok) {
+  // console.log("response.status", response.status);
+  if (response.status !== 200 && response.status !== 404) {
     const errorText = await response.text();
     throw new Error(
       `Failed to fetch question: ${response.status} ${response.statusText} - ${errorText}`,
@@ -147,14 +148,11 @@ export default async function Page({
 }) {
   const { questionId } = await params;
 
+  // console.log("FETCH IT!!");
   // Fetch question data using the utility function
   const result = await fetchQuestionById(questionId);
 
-  // console.log(
-  //   "Question data:",
-  //   questionId,
-  //   JSON.stringify(result.data, null, 2)
-  // );
+  // console.log("Question result:", result);
 
   if (!result.data) {
     return (

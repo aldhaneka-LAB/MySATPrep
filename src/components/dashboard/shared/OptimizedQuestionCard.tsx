@@ -4,7 +4,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader } from "@/components/ui/card-v2";
 import { Separator } from "../../ui/separator";
 import { Badge } from "../../ui/badge";
-import QuestionProblemCard from "@/components/question-problem-card-2";
+import QuestionProblemCard from "@/components/question-problem-card";
 import { QuestionById_Data } from "@/types/question";
 import { StatusBadge } from "@/components/ui/status-badge";
 import { ClockAlertIcon, EyeClosedIcon, ShieldAlertIcon } from "lucide-react";

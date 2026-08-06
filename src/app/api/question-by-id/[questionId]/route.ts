@@ -36,7 +36,7 @@ export async function GET(
     for (const assessment in Assessments) {
       const assessmentData =
         Assessments[assessment as keyof typeof Assessments];
-      console.log(`Fetching questions for assessment: ${assessmentData.text}`);
+      // console.log(`Fetching questions for assessment: ${assessmentData.text}`);
 
       const response = await fetch(apiUrl, {
         method: "POST",
